@@ -3,7 +3,10 @@ project(compiler LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# Include antlr4 runtime
+# --- 1. 引入 ANTLR4 Runtime (包含构建修复) ---
+# 明确关闭 ANTLR4 运行时的内部测试和 Demo，防止 FetchContent 错误
+set(ANTLR4_BUILD_TESTS OFF CACHE BOOL "Disable building ANTLR4 runtime tests." FORCE)
+set(WITH_DEMO OFF CACHE BOOL "Disable building ANTLR4 demo." FORCE)
 add_subdirectory(third_party/antlr4-runtime)
 
 # Headers for include
@@ -13,7 +16,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/antlr
 )
 
-# Generate executable files
+# --- 2. 定义编译器核心可执行文件 ---
+# 收集所有的 .cpp 源文件，包括 src/main.cpp 和 ANTLR 生成的 .cpp
 file(GLOB SRC_FILES
     src/*.cpp
     src/antlr/*.cpp
@@ -21,38 +25,10 @@ file(GLOB SRC_FILES
 
 add_executable(compiler ${SRC_FILES})
 
-# Link runtime
+# 链接 ANTLR 运行时库
 target_link_libraries(compiler antlr4_shared)
 
-# Set up Google Test
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9fd716149c63099179ad6c5.zip
-)
-
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
-# Add test executable
-enable_testing()
-
-add_executable(
-  unit_tests
-  # Link your test executable to the gtest/gtest_main library
-)
-
-target_link_libraries(
-  unit_tests
-  gtest_main
-  # Link any libraries your tests need
-)
-
-include(GoogleTest)
-gtest_discover_tests(unit_tests)
-
-# Config ASAN
+# --- 3. ASAN 配置 (保留原样) ---
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 
 if(ENABLE_ASAN)
