@@ -14,10 +14,13 @@ RETURN: 'return';
 // Identifiers
 IDENT: [a-zA-Z_] [a-zA-Z_0-9]*;
 
-// Constants
-IntConst: ('0' | [1-9] [0-9]*);
+// Constants (核心修复：添加十六进制和八进制支持)
+DecimalConst: [1-9] [0-9]*;
+OctalConst: '0' [0-7]*;
+HexConst: ('0x' | '0X') [0-9a-fA-F]+;
+IntConst: DecimalConst | OctalConst | HexConst;
 
-// Operators and Punctuators
+// Operators
 L_PAREN: '(';
 R_PAREN: ')';
 L_BRACK: '[';
@@ -45,7 +48,7 @@ AND: '&&';
 OR: '||';
 NOT: '!';
 
-// Whitespace and Comments
+// Whitespace
 WS: [ \t\r\n]+ -> skip;
 LINE_COMMENT: '//' .*? '\n' -> skip;
 BLOCK_COMMENT: '/*' .*? '*/' -> skip;

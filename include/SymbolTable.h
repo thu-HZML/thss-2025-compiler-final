@@ -4,50 +4,42 @@
 #include <map>
 #include <vector>
 #include <string>
-#include <algorithm>
 
-// Holds information about a defined symbol (variable, function, etc.)
 struct SymbolInfo {
     TypePtr type;
-    ValuePtr value; // Pointer to the Value (usually the address/alloca instruction result for variables)
+    ValuePtr value;   
+    bool isConst;     
+    int constIntVal;  
+    
+    // 数组扩展
+    bool isArray;
+    std::vector<int> dims; // 存储每一维的大小，例如 int a[2][3] -> {2, 3}
 };
 
 class SymbolTable {
 private:
-    // Vector of symbol maps, simulating nested scopes (from global to current inner)
     std::vector<std::map<std::string, SymbolInfo>> scopes;
 
 public:
-    SymbolTable() {
-        enterScope(); // Global scope always exists
+    SymbolTable() { enterScope(); }
+
+    void enterScope() { scopes.emplace_back(); }
+    
+    void exitScope() { 
+        if (scopes.size() > 1) scopes.pop_back(); 
     }
 
-    void enterScope() {
-        scopes.emplace_back(); // Add a new empty map for the new scope
-    }
-
-    void exitScope() {
-        if (scopes.size() > 1) { 
-            scopes.pop_back();
-        }
-    }
-
-    // Adds a symbol to the current scope.
-    bool addSymbol(const std::string& name, TypePtr type, ValuePtr value) {
-        if (scopes.empty() || scopes.back().count(name)) return false; 
-        
-        scopes.back()[name] = {type, value};
+    // 更新接口以支持 dimensions
+    bool addSymbol(const std::string& name, TypePtr type, ValuePtr value, bool isConst = false, int constVal = 0, bool isArray = false, const std::vector<int>& dims = {}) {
+        if (scopes.empty() || scopes.back().count(name)) return false;
+        scopes.back()[name] = {type, value, isConst, constVal, isArray, dims};
         return true;
     }
 
-    // Looks up a symbol, starting from the current inner scope and moving outwards.
     SymbolInfo* lookup(const std::string& name) {
-        // Iterate backwards from the innermost scope
         for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-            if (it->count(name)) {
-                return &it->at(name); // Found
-            }
+            if (it->count(name)) return &it->at(name);
         }
-        return nullptr; // Not found
+        return nullptr;
     }
 };
