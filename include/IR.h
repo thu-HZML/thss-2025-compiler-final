@@ -2,32 +2,25 @@
 
 #include <string>
 #include <vector>
-#include <map>
 #include <memory>
 #include <sstream>
 #include <iostream>
 
-// --- 1. Type System (Minimal) ---
+// --- 1. Type System ---
 class Type {
 public:
-    enum TypeID { IntTyID, VoidTyID, PointerTyID };
+    enum TypeID { IntTyID, VoidTyID };
     std::string irName;
+    TypeID id;
 
-    Type(TypeID id, const std::string& name) : id(id), irName(name) {}
+    Type(TypeID id, const std::string& name) : irName(name), id(id) {}
     virtual ~Type() = default;
 
-    static Type* getInt32Ty() {
-        static Type intType(IntTyID, "i32");
-        return &intType;
-    }
-    static Type* getVoidTy() {
-        static Type voidType(VoidTyID, "void");
-        return &voidType;
-    }
-    const TypeID id;
+    static Type* getInt32Ty() { static Type t(IntTyID, "i32"); return &t; }
+    static Type* getVoidTy() { static Type t(VoidTyID, "void"); return &t; }
 };
 
-// --- 2. Value (Base Class) ---
+// --- 2. Value ---
 class Value {
 public:
     Type* type;
@@ -38,94 +31,98 @@ public:
     virtual std::string to_string() const { return name; }
 };
 
-// Pointers for convenience
 using ValuePtr = Value*;
 using TypePtr = Type*;
 
-// --- 3. Instruction ---
+// --- 3. ConstantInt ---
+class ConstantInt : public Value {
+public:
+    int value;
+    ConstantInt(int val) : Value(Type::getInt32Ty(), std::to_string(val)), value(val) {}
+};
+
+// --- 4. Instruction ---
 class Instruction : public Value {
 public:
-    std::string ir;
+    std::string op;
+    std::string args;
 
-    Instruction(Type* type, const std::string& name, const std::string& irCode)
-        : Value(type, name), ir(irCode) {}
+    Instruction(Type* type, const std::string& name, const std::string& opcode, const std::string& arguments)
+        : Value(type, name), op(opcode), args(arguments) {}
 
-    // For instructions that produce a result (like alloca, load)
-    std::string to_string() const override {
-        return name + " = " + ir;
-    }
-    // For instructions that don't produce a result (like store, ret)
-    std::string to_string_void() const {
-        return ir;
+    std::string print() const {
+        if (name.empty()) return "  " + op + " " + args;
+        return "  " + name + " = " + op + " " + args;
     }
 };
 
-// --- 4. BasicBlock ---
+// --- 5. BinaryInst ---
+class BinaryInst : public Instruction {
+public:
+    BinaryInst(std::string op, ValuePtr lhs, ValuePtr rhs, std::string name)
+        : Instruction(Type::getInt32Ty(), name, op, 
+                      "i32 " + lhs->to_string() + ", " + rhs->to_string()) {}
+};
+
+// --- 6. BasicBlock ---
 class BasicBlock : public Value {
 public:
     std::vector<std::unique_ptr<Instruction>> instList;
 
     BasicBlock(const std::string& name) : Value(Type::getVoidTy(), name) {}
+    
     void addInstruction(std::unique_ptr<Instruction> inst) {
         instList.push_back(std::move(inst));
     }
 
-    std::string to_string() const override {
+    std::string print() const {
         std::stringstream ss;
         ss << name << ":\n";
         for (const auto& inst : instList) {
-            ss << "  ";
-            if (inst->type->id != Type::VoidTyID && !inst->name.empty()) {
-                ss << inst->to_string() << "\n";
-            } else {
-                ss << inst->to_string_void() << "\n";
-            }
+            ss << inst->print() << "\n";
         }
         return ss.str();
     }
-    const std::vector<std::unique_ptr<Instruction>>& getInstList() const { return instList; }
 };
 
-// --- 5. Function ---
+// --- 7. Function ---
 class Function : public Value {
 public:
-    std::string linkage; 
     std::vector<std::unique_ptr<BasicBlock>> blockList;
+    std::vector<std::string> args; // 存储参数名，如 %0, %1
 
     Function(Type* retType, const std::string& name)
-        : Value(retType, "@" + name), linkage("define") {
-        blockList.push_back(std::make_unique<BasicBlock>("mainEntry"));
+        : Value(retType, "@" + name) {
+        blockList.push_back(std::make_unique<BasicBlock>("entry"));
     }
 
-    std::string to_string() const override {
+    BasicBlock* getEntryBlock() { return blockList[0].get(); }
+
+    std::string print() const {
         std::stringstream ss;
-        ss << linkage << " " << type->irName << " " << name << "() {\n";
-        for (const auto& block : blockList) {
-            ss << block->to_string();
+        ss << "define " << type->irName << " " << name << "(";
+        // 打印参数列表
+        for (size_t i = 0; i < args.size(); ++i) {
+            ss << "i32 " << args[i];
+            if (i < args.size() - 1) ss << ", ";
         }
+        ss << ") {\n";
+        for (const auto& block : blockList) ss << block->print();
         ss << "}\n";
         return ss.str();
     }
-    BasicBlock* getEntryBlock() const { return blockList[0].get(); }
 };
 
-// --- 6. Module (Top-Level Container) ---
+// --- 8. Module ---
 class Module {
 public:
     std::vector<std::unique_ptr<Function>> funcList;
-
-    void addFunction(std::unique_ptr<Function> func) {
-        funcList.push_back(std::move(func));
-    }
-
-    std::string to_string() const {
+    void addFunction(std::unique_ptr<Function> func) { funcList.push_back(std::move(func)); }
+    
+    std::string print() const {
         std::stringstream ss;
-        ss << "; ModuleID = 'moudle'\n";
-        ss << "source_filename = \"moudle\"\n\n";
-
-        for (const auto& func : funcList) {
-            ss << func->to_string() << "\n";
-        }
+        ss << "declare i32 @getint()\ndeclare void @putint(i32)\n\n";
+        for (const auto& f : funcList) ss << f->print() << "\n";
         return ss.str();
     }
 };

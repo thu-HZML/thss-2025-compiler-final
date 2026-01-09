@@ -3,21 +3,16 @@
 #include "IR.h"
 #include <string>
 
-// Forward declarations
-class Function;
-class BasicBlock;
-
 class IRBuilder {
-private:
+public:
     BasicBlock* currentBlock = nullptr;
+    Module* module = nullptr;
     int regCounter = 0;
 
-    // Helper to generate unique virtual register names like %1, %2, %a1, etc.
     std::string nextName() {
         return "%" + std::to_string(regCounter++);
     }
 
-public:
     void setInsertPoint(BasicBlock* block) {
         currentBlock = block;
     }
@@ -26,48 +21,80 @@ public:
         regCounter = 0;
     }
 
-    // 1. ALLOCA (Allocate memory for local variables)
-    ValuePtr CreateAlloca(TypePtr type, const std::string& varName) {
-        // Alloca result is an i32* (pointer to i32).
-        // For simplicity, we use the variable name as the LLVM address name (%a).
-        std::string name = "%" + varName;
-        std::string irCode = "alloca i32, align 4";
-        
-        // We set the instruction's *result* type to i32 (the pointer target is implicit in the instruction).
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, irCode); 
-        ValuePtr result = inst.get();
+    // 1. Alloca
+    ValuePtr CreateAlloca(const std::string& typeStr) {
+        std::string name = nextName();
+        std::string args = typeStr + ", align 4";
+        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "alloca", args);
+        ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
-        return result;
+        return res;
     }
 
-    // 2. STORE (Saves a value to an address)
-    void CreateStore(int constantValue, ValuePtr ptr) {
-        // ptr->to_string() gets the name of the memory location, e.g., %a
-        // The pointer type is implicitly i32* in our simplified world.
-        std::string irCode = "store i32 " + std::to_string(constantValue) + 
-                             ", i32* " + ptr->to_string() + ", align 4";
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", irCode));
+    // 2. Store
+    void CreateStore(ValuePtr val, ValuePtr ptr) {
+        std::string args = "i32 " + val->to_string() + ", i32* " + ptr->to_string() + ", align 4";
+        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
+    }
+    void CreateStore(int val, ValuePtr ptr) {
+        std::string args = "i32 " + std::to_string(val) + ", i32* " + ptr->to_string() + ", align 4";
+        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
     }
 
-
-    // 3. LOAD (Loads a value from an address)
+    // 3. Load
     ValuePtr CreateLoad(ValuePtr ptr) {
-        // The result of load is the value itself (i32).
-        TypePtr loadedType = Type::getInt32Ty(); 
-        std::string name = nextName(); // Generates %a1, %a2 etc.
-        // ptr->to_string() gets the name of the address (%a)
-        std::string irCode = "load i32, i32* " + ptr->to_string() + ", align 4";
-
-        auto inst = std::make_unique<Instruction>(loadedType, name, irCode);
-        ValuePtr result = inst.get();
+        std::string name = nextName();
+        std::string args = "i32, i32* " + ptr->to_string() + ", align 4";
+        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "load", args);
+        ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
-        return result;
+        return res;
     }
 
-    // 4. RET (Returns a value from the function)
-    void CreateRet(ValuePtr value) {
-        // value->to_string() gets the value name, e.g., %a1
-        std::string irCode = "ret i32 " + value->to_string();
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", irCode));
+    // 4. Ret
+    void CreateRet(ValuePtr val) {
+        std::string args = "i32 " + val->to_string();
+        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", args));
+    }
+
+    // 5. Binary Ops (用于数组地址计算)
+    ValuePtr CreateBinary(std::string op, ValuePtr lhs, ValuePtr rhs) {
+        std::string name = nextName();
+        auto inst = std::make_unique<BinaryInst>(op, lhs, rhs, name);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+    
+    // 6. ICmp / ZExt
+    ValuePtr CreateICmp(std::string cond, ValuePtr lhs, ValuePtr rhs) {
+        std::string name = nextName();
+        std::string args = cond + " i32 " + lhs->to_string() + ", " + rhs->to_string();
+        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "icmp", args);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+    ValuePtr CreateZExt(ValuePtr val) {
+        std::string name = nextName();
+        std::string args = "i1 " + val->to_string() + " to i32";
+        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "zext", args);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    // 7. GEP (支持扁平化数组寻址)
+    // 扁平化后，数组总是一维 [Size x i32]
+    // 访问时使用 calculated_index
+    ValuePtr CreateGEP(ValuePtr ptr, ValuePtr idx, int totalSize) {
+        std::string name = nextName();
+        std::string type = "[" + std::to_string(totalSize) + " x i32]";
+        std::string args = "inbounds " + type + ", " + type + "* " + ptr->to_string() + ", i32 0, i32 " + idx->to_string();
+        
+        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "getelementptr", args);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
     }
 };
