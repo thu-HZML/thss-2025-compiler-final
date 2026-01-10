@@ -19,7 +19,14 @@ public:
     std::vector<std::string> globalLines;
     std::string print() const {
         std::stringstream ss;
-        ss << "declare i32 @getint()\ndeclare void @putint(i32)\n\n";
+        ss << "declare i32 @getint()\n"
+           << "declare i32 @getch()\n"
+           << "declare i32 @getarray(i32*)\n"
+           << "declare void @putint(i32)\n"
+           << "declare void @putch(i32)\n"
+           << "declare void @putarray(i32, i32*)\n"
+           << "declare void @starttime()\n"
+           << "declare void @stoptime()\n\n";
         for (const auto& line : globalLines) ss << line << "\n";
         ss << "\n";
         for (const auto& f : funcList) ss << f->print() << "\n";
@@ -208,19 +215,23 @@ public:
         builder.reset();
 
         if (ctx->funcFParams()) {
+            int argIdx = 0;
             for (auto param : ctx->funcFParams()->funcFParam()) {
                 std::string paramName = getTokenText(param->IDENT());
-                std::string argReg = "%" + std::to_string(builder.regCounter++);
+                // LLVM 参数从 %0 开始计数
+                std::string argReg = "%" + std::to_string(argIdx++);
                 currentFunction->args.push_back(argReg);
 
+                // 任务 D 要求：在入口块生成 alloca/store
                 ValuePtr ptr = builder.CreateAlloca("i32"); 
                 ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
                 builder.CreateStore(argVal, ptr);
-                
-                // 参数可能是数组，但这里简单处理为 i32 标量或指针
-                // 真正的数组参数处理需要指针类型支持，这里暂时保留原样
+
+                // 将参数指针存入符号表 
                 symbolTable.addSymbol(paramName, Type::getInt32Ty(), ptr, false, 0);
             }
+            // 更新寄存器计数器，防止冲突
+            builder.regCounter = argIdx;
         }
         
         visit(ctx->block());
@@ -543,21 +554,14 @@ public:
 
     antlrcpp::Any visitFuncCallExp(SysYParser::FuncCallExpContext *ctx) override {
         std::string funcName = getTokenText(ctx->IDENT());
-        std::string argsStr = "";
+        std::vector<ValuePtr> args;
         
         if (ctx->funcRParams()) {
-            for (size_t i = 0; i < ctx->funcRParams()->exp().size(); ++i) {
-                ValuePtr argVal = std::any_cast<ValuePtr>(visit(ctx->funcRParams()->exp(i)));
-                if (i > 0) argsStr += ", ";
-                argsStr += "i32 " + argVal->to_string();
+            for (auto expCtx : ctx->funcRParams()->exp()) {
+                ValuePtr argVal = std::any_cast<ValuePtr>(visit(expCtx));
+                args.push_back(argVal);
             }
         }
-        
-        std::string name = builder.nextName();
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call", 
-            "i32 @" + funcName + "(" + argsStr + ")");
-        ValuePtr res = inst.get();
-        builder.currentBlock->addInstruction(std::move(inst));
-        return res;
+        return builder.CreateCall(funcName, args);
     }
 };
