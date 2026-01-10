@@ -57,6 +57,11 @@ public:
         currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", args));
     }
 
+    // 支持 void 返回
+    void CreateVoidRet() {
+        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", "void"));
+    }
+
     // 5. Binary Ops (用于数组地址计算)
     ValuePtr CreateBinary(std::string op, ValuePtr lhs, ValuePtr rhs) {
         std::string name = nextName();
@@ -105,7 +110,7 @@ public:
             if (i > 0) argsStr += ", ";
             argsStr += "i32 " + args[i]->to_string();
         }
-        
+
         if (isVoid) {
             // Void 函数：不分配寄存器名字，指令类型为 void
             auto inst = std::make_unique<Instruction>(Type::getVoidTy(), "", "call", 

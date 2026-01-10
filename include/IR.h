@@ -9,7 +9,7 @@
 // --- 1. Type System ---
 class Type {
 public:
-    enum TypeID { IntTyID, VoidTyID };
+    enum TypeID { IntTyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
     std::string irName;
     TypeID id;
 
@@ -18,6 +18,11 @@ public:
 
     static Type* getInt32Ty() { static Type t(IntTyID, "i32"); return &t; }
     static Type* getVoidTy() { static Type t(VoidTyID, "void"); return &t; }
+
+    bool isVoidTy() const { return id == VoidTyID; }
+    bool isIntegerTy() const { return id == IntTyID; }
+    bool isPointerTy() const { return id == PointerTyID; }
+
 };
 
 // --- 2. Value ---
@@ -91,8 +96,10 @@ public:
     std::vector<std::unique_ptr<BasicBlock>> blockList;
     std::vector<std::string> args; // 存储参数名，如 %0, %1
 
+    Type* returnType;
+
     Function(Type* retType, const std::string& name)
-        : Value(retType, "@" + name) {
+        : Value(retType, "@" + name), returnType(retType) { // 在构造函数中初始化 returnType
         blockList.push_back(std::make_unique<BasicBlock>("entry"));
     }
 

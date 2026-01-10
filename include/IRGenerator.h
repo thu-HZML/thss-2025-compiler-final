@@ -41,6 +41,9 @@ private:
     SymbolTable symbolTable;
     Function* currentFunction = nullptr;
 
+    // 用于记录 SysY 库中 void 函数的名称
+    std::set<std::string> voidFuncs;
+
     std::string getTokenText(antlr4::tree::TerminalNode* node) {
         return node ? node->getSymbol()->getText() : "";
     }
@@ -193,6 +196,13 @@ private:
 public:
     IRGenerator() : module(std::make_unique<ExtendedModule>()) {
         builder.module = module.get();
+
+        // 初始化系统库函数为 void 类型
+        voidFuncs.insert("putint");
+        voidFuncs.insert("putch");
+        voidFuncs.insert("putarray");
+        voidFuncs.insert("starttime");
+        voidFuncs.insert("stoptime");
     }
     
     std::string getIR() const { return module->print(); }
@@ -208,15 +218,25 @@ public:
     antlrcpp::Any visitFuncDef(SysYParser::FuncDefContext *ctx) override {
         std::string name = getTokenText(ctx->IDENT());
         
-        // 创建函数类型，这里暂时假设返回值都是 int (i32)
-        currentFunction = new Function(Type::getInt32Ty(), name);
+        // 处理返回类型
+        std::string typeStr = ctx->funcType()->getText(); // 获取 "int" 或 "void"
+        TypePtr returnType;
+        
+        if (typeStr == "void") {
+            returnType = Type::getVoidTy();
+            voidFuncs.insert(name); // 记录该自定义函数为 void
+        } else {
+            returnType = Type::getInt32Ty();
+        }
+        
+        currentFunction = new Function(returnType, name);
+
         module->addFunction(std::unique_ptr<Function>(currentFunction));
         
         symbolTable.enterScope();
         builder.setInsertPoint(currentFunction->getEntryBlock());
         builder.reset();
 
-        // --- 修复开始 ---
         // 1. 先统计参数个数
         int paramCount = 0;
         if (ctx->funcFParams()) {
@@ -252,9 +272,12 @@ public:
                 i++;
             }
         }
-        // --- 修复结束 ---
 
         visit(ctx->block());
+
+        if (returnType->isVoidTy()) {
+             builder.CreateVoidRet();
+        }
 
         symbolTable.exitScope();
         currentFunction = nullptr;
@@ -464,10 +487,16 @@ public:
 
     antlrcpp::Any visitReturnStmt(SysYParser::ReturnStmtContext *ctx) override {
         if (ctx->exp()) {
+            // 有返回值的 return
             ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
             if (val) builder.CreateRet(val);
         } else {
-             builder.CreateRet(new ConstantInt(0));
+            // 无返回值的 return
+            if (currentFunction && currentFunction->returnType->isVoidTy()) {
+                builder.CreateVoidRet(); // 生成 ret void
+            } else {
+                builder.CreateRet(new ConstantInt(0)); // 兼容旧逻辑，默认 ret 0
+            }
         }
         return nullptr;
     }
@@ -585,12 +614,7 @@ public:
         }
 
         // 判断是否为 SysY 库中的 void 函数
-        bool isVoid = false;
-        if (funcName == "putint" || funcName == "putch" || funcName == "putarray" || 
-            funcName == "starttime" || funcName == "stoptime") {
-            isVoid = true;
-        }
-
+        bool isVoid = (voidFuncs.find(funcName) != voidFuncs.end());
         return builder.CreateCall(funcName, args, isVoid);
     }
 };
