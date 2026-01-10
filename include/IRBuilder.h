@@ -99,19 +99,28 @@ public:
     }
  
     // 8. Call 支持不同数量的参数
-    ValuePtr CreateCall(const std::string& funcName, const std::vector<ValuePtr>& args) {
+    ValuePtr CreateCall(const std::string& funcName, const std::vector<ValuePtr>& args, bool isVoid = false) {
         std::string argsStr = "";
         for (size_t i = 0; i < args.size(); ++i) {
             if (i > 0) argsStr += ", ";
             argsStr += "i32 " + args[i]->to_string();
         }
-        std::string name = nextName();
-        // 简单起见，这里假设所有函数返回 i32
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call", 
-                                                 "i32 @" + funcName + "(" + argsStr + ")");
-        ValuePtr res = inst.get();
-        currentBlock->addInstruction(std::move(inst));
-        return res;
+        
+        if (isVoid) {
+            // Void 函数：不分配寄存器名字，指令类型为 void
+            auto inst = std::make_unique<Instruction>(Type::getVoidTy(), "", "call", 
+                                                     "void @" + funcName + "(" + argsStr + ")");
+            currentBlock->addInstruction(std::move(inst));
+            return nullptr; // 或者返回一个空 Value
+        } else {
+            // 非 Void 函数：分配寄存器，类型为 i32
+            std::string name = nextName();
+            auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call", 
+                                                     "i32 @" + funcName + "(" + argsStr + ")");
+            ValuePtr res = inst.get();
+            currentBlock->addInstruction(std::move(inst));
+            return res;
+        }
     }
 
 };

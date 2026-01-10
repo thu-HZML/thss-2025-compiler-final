@@ -215,47 +215,47 @@ public:
         symbolTable.enterScope();
         builder.setInsertPoint(currentFunction->getEntryBlock());
         builder.reset();
-        
+
         // --- 修复开始 ---
         // 1. 先统计参数个数
         int paramCount = 0;
         if (ctx->funcFParams()) {
             paramCount = ctx->funcFParams()->funcFParam().size();
         }
-    
+
         // 2. 关键：将寄存器计数器跳过参数占用的编号 (例如有1个参数，它占用%0，下条指令应从%1开始)
         builder.regCounter = paramCount;
-    
+
         // 3. 处理参数
         if (ctx->funcFParams()) {
             int i = 0;
             for (auto param : ctx->funcFParams()->funcFParam()) {
                 std::string paramName = getTokenText(param->IDENT());
-                
+
                 // 实参的值来源于对应的寄存器 %i
                 std::string argReg = "%" + std::to_string(i);
                 currentFunction->args.push_back(argReg);
-                
+
                 // 构造参数的 Value 对象
                 ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
-            
+
                 // 在栈上分配空间 (builder.CreateAlloca 会使用 regCounter，此时已经是 i+1 了)
                 // 例如：参数是 %0，这里生成的 ptr 将是 %1
                 ValuePtr allocaPtr = builder.CreateAlloca("i32"); 
-                
+
                 // 将参数值存入栈空间
                 builder.CreateStore(argVal, allocaPtr);
-                
+
                 // 将栈地址注册到符号表，这样后续用到 paramName 时会加载这个地址
                 symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0);
-                
+
                 i++;
             }
         }
         // --- 修复结束 ---
-    
+
         visit(ctx->block());
-        
+
         symbolTable.exitScope();
         currentFunction = nullptr;
         return nullptr;
@@ -583,6 +583,14 @@ public:
                 args.push_back(argVal);
             }
         }
-        return builder.CreateCall(funcName, args);
+
+        // 判断是否为 SysY 库中的 void 函数
+        bool isVoid = false;
+        if (funcName == "putint" || funcName == "putch" || funcName == "putarray" || 
+            funcName == "starttime" || funcName == "stoptime") {
+            isVoid = true;
+        }
+
+        return builder.CreateCall(funcName, args, isVoid);
     }
 };
