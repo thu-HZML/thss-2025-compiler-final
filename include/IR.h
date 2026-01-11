@@ -17,7 +17,7 @@ using TypePtr = class Type*;
 // --- 1. 类型系统增强 ---
 class Type {
 public:
-    enum TypeID { IntTyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
+    enum TypeID { IntTyID, Int1TyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
     std::string irName;
     TypeID id;
     
@@ -32,19 +32,9 @@ public:
 
     static Type* getInt32Ty() { static Type t(IntTyID, "i32"); return &t; }
     static Type* getVoidTy() { static Type t(VoidTyID, "void"); return &t; }
-
-    bool isVoidTy() const { return id == VoidTyID; }
-    bool isIntegerTy() const { return id == IntTyID; }
-    bool isPointerTy() const { return id == PointerTyID; }
-
-    // 静态工厂方法
-    static Type* getInt32Ty() { 
-        static Type t(IntTyID, "i32"); 
-        return &t; 
-    }
     
-    static Type* getVoidTy() { 
-        static Type t(VoidTyID, "void"); 
+    static Type* getInt1Ty() { 
+        static Type t(Int1TyID, "i1"); 
         return &t; 
     }
     
@@ -65,6 +55,8 @@ public:
 
     // 类型查询方法
     bool isInt32Ty() const { return id == IntTyID; }
+    bool isInt1Ty() const { return id == Int1TyID; }
+    bool isIntegerTy() const { return id == IntTyID; }
     bool isVoidTy() const { return id == VoidTyID; }
     bool isArrayTy() const { return id == ArrayTyID; }
     bool isPointerTy() const { return id == PointerTyID; }
