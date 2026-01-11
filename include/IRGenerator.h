@@ -746,7 +746,7 @@ public:
         builder.setInsertPoint(mergeBB);
         
         // 创建phi节点合并结果
-        auto phi = builder.CreatePhi(Type::getInt32Ty(), "land_result");
+        auto phi = builder.CreatePhi(Type::getInt32Ty());
         
         // 添加前驱块的值
         // 来自lhs为false的情况：结果为0
@@ -816,7 +816,7 @@ public:
         builder.setInsertPoint(mergeBB);
         
         // 创建phi节点合并结果
-        auto phi = builder.CreatePhi(Type::getInt32Ty(), "lor_result");
+        auto phi = builder.CreatePhi(Type::getInt32Ty());
         
         // 添加前驱块的值
         // 来自lhs为true的情况：结果为1
@@ -856,14 +856,20 @@ public:
         currentFunction->addBasicBlock(thenBB);
         builder.setInsertPoint(thenBB);
         visit(ctx->stmt(0));  // 处理then语句
-        builder.CreateBr(mergeBB);  // 跳转到合并块
+
+        // 检查基本块是否已终止（如果有return语句）
+        if (!builder.getInsertBlock()->isTerminated()) {
+            builder.CreateBr(mergeBB);  // 只有未终止时才添加跳转
+        }
         
         // else分支（如果有）
         if (elseBB) {
             currentFunction->addBasicBlock(elseBB);
             builder.setInsertPoint(elseBB);
             visit(ctx->stmt(1));  // 处理else语句
-            builder.CreateBr(mergeBB);
+            if (!builder.getInsertBlock()->isTerminated()) {
+                builder.CreateBr(mergeBB);
+            }
         }
         
         // 合并块
@@ -875,14 +881,18 @@ public:
 
     // 新增：while语句
     antlrcpp::Any visitWhileStmt(SysYParser::WhileStmtContext *ctx) override {
+        // 为当前循环生成唯一ID
+        static int whileCounter = 0;
+        int currentWhile = whileCounter++;
+        
         // 保存当前循环上下文
         BasicBlock* prevCondBB = condBlockStack.empty() ? nullptr : condBlockStack.top();
         BasicBlock* prevMergeBB = mergeBlockStack.empty() ? nullptr : mergeBlockStack.top();
         
-        // 创建循环基本块
-        BasicBlock* condBB = new BasicBlock("while.cond");
-        BasicBlock* bodyBB = new BasicBlock("while.body");
-        BasicBlock* mergeBB = new BasicBlock("while.merge");
+        // 创建循环基本块，使用唯一名称
+        BasicBlock* condBB = new BasicBlock("while.cond." + std::to_string(currentWhile));
+        BasicBlock* bodyBB = new BasicBlock("while.body." + std::to_string(currentWhile));
+        BasicBlock* mergeBB = new BasicBlock("while.merge." + std::to_string(currentWhile));
         
         // 设置当前循环上下文
         condBlockStack.push(condBB);
@@ -905,7 +915,11 @@ public:
         currentFunction->addBasicBlock(bodyBB);
         builder.setInsertPoint(bodyBB);
         visit(ctx->stmt());  // 处理循环体
-        builder.CreateBr(condBB);  // 跳回条件判断
+        
+        // 只有在循环体未终止时才添加跳转（防止return后还有代码）
+        if (!builder.getInsertBlock()->isTerminated()) {
+            builder.CreateBr(condBB);  // 跳回条件判断
+        }
         
         // 合并块
         currentFunction->addBasicBlock(mergeBB);

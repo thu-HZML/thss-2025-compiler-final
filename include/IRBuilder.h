@@ -152,10 +152,12 @@ public:
     }
 
     // 12. Phi节点 - 新增
-    PhiNode* CreatePhi(Type* type, const std::string& name) {
-        // 确保phi节点名称以%开头
+    PhiNode* CreatePhi(Type* type, const std::string& name = "") {
+        // 如果名称为空，使用nextName()生成数字编号
         std::string phiName = name;
-        if (!phiName.empty() && phiName[0] != '%') {
+        if (phiName.empty()) {
+            phiName = nextName();
+        } else if (phiName[0] != '%') {
             phiName = "%" + phiName;
         }
         
