@@ -336,15 +336,16 @@ private:
         // 使用非数字名称以避免 LLVM 编号顺序约束
         // 必须以 % 开头
         std::string varName = "%alloc_" + std::to_string(id);
-        if (!name.empty()) {
+        if (!name.empty())
+        {
             // 简单的清理名称中的非字母数字字符（如果需要），这里假设 name 合法
             // 添加前缀区别于普通变量
-            varName = "%" + name + "_addr_" + std::to_string(id); 
+            varName = "%" + name + "_addr_" + std::to_string(id);
         }
 
         auto allocInst = std::make_unique<AllocaInst>(type, varName);
         ValuePtr data = allocInst.get();
-        
+
         // 插入到入口块的起始位置
         entryBB->instList.insert(entryBB->instList.begin(), std::move(allocInst));
         return data;
@@ -557,7 +558,7 @@ public:
                 if (currentFunction)
                 {
                     // 使用 createEntryBlockAlloca 替代 builder.CreateAlloca 防止在循环中并不停分配栈空间
-                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    Type *arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
                     ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, true, dims);
 
@@ -631,7 +632,7 @@ public:
                 if (currentFunction)
                 {
                     // 使用 createEntryBlockAlloca
-                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    Type *arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
                     ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0, true, dims);
 
@@ -1219,7 +1220,91 @@ public:
 
         // 恢复之前的循环上下文
         condBlockStack.pop();
-            mergeBlockStack.push(prevMergeBB);
+        mergeBlockStack.push(prevMergeBB);
+
+        return nullptr;
+    }
+
+    antlrcpp::Any visitForStmt(SysYParser::ForStmtContext *ctx) override
+    {
+        symbolTable.enterScope();
+
+        if (ctx->initDecl)
+        {
+            visit(ctx->initDecl);
+        }
+        else if (ctx->initStmt)
+        {
+            visit(ctx->initStmt);
+        }
+
+        static int forCounter = 0;
+        int currentFor = forCounter++;
+
+        BasicBlock *condBB = new BasicBlock("for.cond." + std::to_string(currentFor));
+        BasicBlock *bodyBB = new BasicBlock("for.body." + std::to_string(currentFor));
+        // Check member pointers directly
+        bool hasStep = (ctx->stepLVal != nullptr) || (ctx->stepExp != nullptr);
+        BasicBlock *stepBB = hasStep ? new BasicBlock("for.step." + std::to_string(currentFor)) : nullptr;
+        BasicBlock *mergeBB = new BasicBlock("for.merge." + std::to_string(currentFor));
+
+        BasicBlock *continueTarget = hasStep ? stepBB : condBB;
+        condBlockStack.push(continueTarget);
+        mergeBlockStack.push(mergeBB);
+
+        builder.CreateBr(condBB);
+
+        currentFunction->addBasicBlock(condBB);
+        builder.setInsertPoint(condBB);
+
+        if (ctx->condition)
+        {
+            ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->condition));
+            if (cond)
+            {
+                ValuePtr zero = new ConstantInt(0);
+                ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+                builder.CreateCondBr(condBool, bodyBB, mergeBB);
+            }
+        }
+        else
+        {
+            builder.CreateBr(bodyBB);
+        }
+
+        currentFunction->addBasicBlock(bodyBB);
+        builder.setInsertPoint(bodyBB);
+        visit(ctx->body);
+
+        if (!builder.getInsertBlock()->isTerminated())
+        {
+            builder.CreateBr(continueTarget);
+        }
+
+        if (hasStep)
+        {
+            currentFunction->addBasicBlock(stepBB);
+            builder.setInsertPoint(stepBB);
+            if (ctx->stepLVal)
+            {
+                ValuePtr ptr = getLValPointer(ctx->stepLVal);
+                ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->stepRVal));
+                if (ptr && rhs)
+                    builder.CreateStore(rhs, ptr);
+            }
+            else
+            {
+                visit(ctx->stepExp);
+            }
+            builder.CreateBr(condBB);
+        }
+
+        currentFunction->addBasicBlock(mergeBB);
+        builder.setInsertPoint(mergeBB);
+
+        condBlockStack.pop();
+        mergeBlockStack.pop();
+        symbolTable.exitScope();
 
         return nullptr;
     }

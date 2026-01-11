@@ -7,6 +7,7 @@ VOID: 'void';
 IF: 'if';
 ELSE: 'else';
 WHILE: 'while';
+FOR: 'for';
 BREAK: 'break';
 CONTINUE: 'continue';
 RETURN: 'return';
@@ -15,11 +16,10 @@ RETURN: 'return';
 IDENT: [a-zA-Z_] [a-zA-Z_0-9]*;
 
 // Constants (核心修复：添加十六进制和八进制支持)
-IntConst: 
-    ('0x' | '0X') [0-9a-fA-F]+
-    | '0' [0-7]*
-    | [1-9] [0-9]*
-    ;
+IntConst:
+	('0x' | '0X') [0-9a-fA-F]+
+	| '0' [0-7]*
+	| [1-9] [0-9]*;
 
 // Operators
 L_PAREN: '(';

@@ -8,3 +8,5 @@ dist/
 
 # test output
 test/resources/functional/*.ll
+test/extended/*.ll
+test/extended/*.output

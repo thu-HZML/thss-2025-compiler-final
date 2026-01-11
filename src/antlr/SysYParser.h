@@ -12,12 +12,12 @@
 class  SysYParser : public antlr4::Parser {
 public:
   enum {
-    CONST = 1, INT = 2, VOID = 3, IF = 4, ELSE = 5, WHILE = 6, BREAK = 7, 
-    CONTINUE = 8, RETURN = 9, IDENT = 10, IntConst = 11, L_PAREN = 12, R_PAREN = 13, 
-    L_BRACK = 14, R_BRACK = 15, L_BRACE = 16, R_BRACE = 17, COMMA = 18, 
-    SEMICOLON = 19, PLUS = 20, MINUS = 21, MUL = 22, DIV = 23, MOD = 24, 
-    ASSIGN = 25, EQ = 26, NEQ = 27, LT = 28, GT = 29, LE = 30, GE = 31, 
-    AND = 32, OR = 33, NOT = 34, WS = 35, LINE_COMMENT = 36, BLOCK_COMMENT = 37
+    CONST = 1, INT = 2, VOID = 3, IF = 4, ELSE = 5, WHILE = 6, FOR = 7, 
+    BREAK = 8, CONTINUE = 9, RETURN = 10, IDENT = 11, IntConst = 12, L_PAREN = 13, 
+    R_PAREN = 14, L_BRACK = 15, R_BRACK = 16, L_BRACE = 17, R_BRACE = 18, 
+    COMMA = 19, SEMICOLON = 20, PLUS = 21, MINUS = 22, MUL = 23, DIV = 24, 
+    MOD = 25, ASSIGN = 26, EQ = 27, NEQ = 28, LT = 29, GT = 30, LE = 31, 
+    GE = 32, AND = 33, OR = 34, NOT = 35, WS = 36, LINE_COMMENT = 37, BLOCK_COMMENT = 38
   };
 
   enum {
@@ -338,6 +338,32 @@ public:
     virtual size_t getRuleIndex() const override;
 
    
+  };
+
+  class  ForStmtContext : public StmtContext {
+  public:
+    ForStmtContext(StmtContext *ctx);
+
+    SysYParser::DeclContext *initDecl = nullptr;
+    SysYParser::StmtContext *initStmt = nullptr;
+    SysYParser::ExpContext *condition = nullptr;
+    SysYParser::LValContext *stepLVal = nullptr;
+    SysYParser::ExpContext *stepRVal = nullptr;
+    SysYParser::ExpContext *stepExp = nullptr;
+    SysYParser::StmtContext *body = nullptr;
+    antlr4::tree::TerminalNode *FOR();
+    antlr4::tree::TerminalNode *L_PAREN();
+    antlr4::tree::TerminalNode *SEMICOLON();
+    antlr4::tree::TerminalNode *R_PAREN();
+    std::vector<StmtContext *> stmt();
+    StmtContext* stmt(size_t i);
+    DeclContext *decl();
+    antlr4::tree::TerminalNode *ASSIGN();
+    std::vector<ExpContext *> exp();
+    ExpContext* exp(size_t i);
+    LValContext *lVal();
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
   };
 
   class  WhileStmtContext : public StmtContext {
