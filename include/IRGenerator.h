@@ -327,6 +327,29 @@ private:
         }
     }
 
+    // 辅助函数：在入口块创建 Alloca 指令
+    ValuePtr createEntryBlockAlloca(Type *type, const std::string &name = "")
+    {
+        BasicBlock *entryBB = currentFunction->blockList.front().get();
+        static int allocCounter = 0;
+        int id = allocCounter++;
+        // 使用非数字名称以避免 LLVM 编号顺序约束
+        // 必须以 % 开头
+        std::string varName = "%alloc_" + std::to_string(id);
+        if (!name.empty()) {
+            // 简单的清理名称中的非字母数字字符（如果需要），这里假设 name 合法
+            // 添加前缀区别于普通变量
+            varName = "%" + name + "_addr_" + std::to_string(id); 
+        }
+
+        auto allocInst = std::make_unique<AllocaInst>(type, varName);
+        ValuePtr data = allocInst.get();
+        
+        // 插入到入口块的起始位置
+        entryBB->instList.insert(entryBB->instList.begin(), std::move(allocInst));
+        return data;
+    }
+
     // 辅助函数：创建新的基本块并设置插入点
     BasicBlock *createAndSetBasicBlock(const std::string &name)
     {
@@ -533,8 +556,9 @@ public:
 
                 if (currentFunction)
                 {
-                    std::string typeStr = "[" + std::to_string(totalSize) + " x i32]";
-                    ValuePtr ptr = builder.CreateAlloca(typeStr);
+                    // 使用 createEntryBlockAlloca 替代 builder.CreateAlloca 防止在循环中并不停分配栈空间
+                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, true, dims);
 
                     // 局部常量数组必须全部存储，包括 0 值，因为 alloca 内存未初始化
@@ -571,7 +595,7 @@ public:
 
             if (currentFunction)
             {
-                ValuePtr ptr = builder.CreateAlloca("i32");
+                ValuePtr ptr = createEntryBlockAlloca(Type::getInt32Ty());
                 builder.CreateStore(val, ptr);
                 symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, val);
             }
@@ -606,8 +630,9 @@ public:
 
                 if (currentFunction)
                 {
-                    std::string typeStr = "[" + std::to_string(totalSize) + " x i32]";
-                    ValuePtr ptr = builder.CreateAlloca(typeStr);
+                    // 使用 createEntryBlockAlloca
+                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0, true, dims);
 
                     if (def->ASSIGN() && def->initVal())
@@ -702,7 +727,7 @@ public:
             // 标量处理
             if (currentFunction)
             {
-                ValuePtr ptr = builder.CreateAlloca("i32");
+                ValuePtr ptr = createEntryBlockAlloca(Type::getInt32Ty());
                 if (def->ASSIGN() && def->initVal()->exp())
                 {
                     ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
@@ -1194,10 +1219,6 @@ public:
 
         // 恢复之前的循环上下文
         condBlockStack.pop();
-        mergeBlockStack.pop();
-        if (prevCondBB)
-            condBlockStack.push(prevCondBB);
-        if (prevMergeBB)
             mergeBlockStack.push(prevMergeBB);
 
         return nullptr;
