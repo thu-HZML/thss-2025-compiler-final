@@ -17,14 +17,7 @@ using TypePtr = class Type*;
 // --- 1. 类型系统增强 ---
 class Type {
 public:
-    enum TypeID { 
-        IntTyID,     // 整数类型
-        Int1TyID,    // 布尔类型（1位整数）
-        VoidTyID,    // 空类型
-        ArrayTyID,   // 数组类型
-        PointerTyID  // 指针类型
-    };
-    
+    enum TypeID { IntTyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
     std::string irName;
     TypeID id;
     
@@ -37,14 +30,16 @@ public:
     
     virtual ~Type() = default;
 
+    static Type* getInt32Ty() { static Type t(IntTyID, "i32"); return &t; }
+    static Type* getVoidTy() { static Type t(VoidTyID, "void"); return &t; }
+
+    bool isVoidTy() const { return id == VoidTyID; }
+    bool isIntegerTy() const { return id == IntTyID; }
+    bool isPointerTy() const { return id == PointerTyID; }
+
     // 静态工厂方法
     static Type* getInt32Ty() { 
         static Type t(IntTyID, "i32"); 
-        return &t; 
-    }
-    
-    static Type* getInt1Ty() { 
-        static Type t(Int1TyID, "i1"); 
         return &t; 
     }
     
@@ -70,7 +65,6 @@ public:
 
     // 类型查询方法
     bool isInt32Ty() const { return id == IntTyID; }
-    bool isInt1Ty() const { return id == Int1TyID; }
     bool isVoidTy() const { return id == VoidTyID; }
     bool isArrayTy() const { return id == ArrayTyID; }
     bool isPointerTy() const { return id == PointerTyID; }
@@ -377,11 +371,14 @@ public:
 class Function : public Value {
 public:
     std::vector<std::unique_ptr<BasicBlock>> blockList;
-    std::vector<std::string> args;  // 参数名，如 %0, %1
+    std::vector<std::string> args; // 存储参数名，如 %0, %1
+
+    Type* returnType;
+
     std::vector<Type*> argTypes;    // 参数类型
     
     Function(Type* retType, const std::string& name)
-        : Value(retType, "@" + name) {
+        : Value(retType, "@" + name), returnType(retType) { // 在构造函数中初始化 returnType
         blockList.push_back(std::make_unique<BasicBlock>("entry"));
     }
     

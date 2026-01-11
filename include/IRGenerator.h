@@ -21,7 +21,14 @@ public:
     std::vector<std::string> globalLines;
     std::string print() const {
         std::stringstream ss;
-        ss << "declare i32 @getint()\ndeclare void @putint(i32)\n\n";
+        ss << "declare i32 @getint()\n"
+           << "declare i32 @getch()\n"
+           << "declare i32 @getarray(i32*)\n"
+           << "declare void @putint(i32)\n"
+           << "declare void @putch(i32)\n"
+           << "declare void @putarray(i32, i32*)\n"
+           << "declare void @starttime()\n"
+           << "declare void @stoptime()\n\n";
         for (const auto& line : globalLines) ss << line << "\n";
         ss << "\n";
         for (const auto& f : funcList) ss << f->print() << "\n";
@@ -35,6 +42,9 @@ private:
     IRBuilder builder;
     SymbolTable symbolTable;
     Function* currentFunction = nullptr;
+
+    // 用于记录 SysY 库中 void 函数的名称
+    std::set<std::string> voidFuncs;
 
     // 循环上下文栈，用于break/continue语句
     std::stack<BasicBlock*> condBlockStack;    // 循环条件块栈
@@ -254,6 +264,13 @@ private:
 public:
     IRGenerator() : module(std::make_unique<ExtendedModule>()) {
         builder.module = module.get();
+
+        // 初始化系统库函数为 void 类型
+        voidFuncs.insert("putint");
+        voidFuncs.insert("putch");
+        voidFuncs.insert("putarray");
+        voidFuncs.insert("starttime");
+        voidFuncs.insert("stoptime");
     }
     
     std::string getIR() const { return module->print(); }
@@ -268,30 +285,68 @@ public:
 
     antlrcpp::Any visitFuncDef(SysYParser::FuncDefContext *ctx) override {
         std::string name = getTokenText(ctx->IDENT());
-        currentFunction = new Function(Type::getInt32Ty(), name);
+        
+        // 处理返回类型
+        std::string typeStr = ctx->funcType()->getText(); // 获取 "int" 或 "void"
+        TypePtr returnType;
+        
+        if (typeStr == "void") {
+            returnType = Type::getVoidTy();
+            voidFuncs.insert(name); // 记录该自定义函数为 void
+        } else {
+            returnType = Type::getInt32Ty();
+        }
+        
+        currentFunction = new Function(returnType, name);
+
         module->addFunction(std::unique_ptr<Function>(currentFunction));
         
         symbolTable.enterScope();
         builder.setInsertPoint(currentFunction->getEntryBlock());
         builder.reset();
 
+        // 1. 先统计参数个数
+        int paramCount = 0;
         if (ctx->funcFParams()) {
+            paramCount = ctx->funcFParams()->funcFParam().size();
+        }
+
+        // 2. 关键：将寄存器计数器跳过参数占用的编号 (例如有1个参数，它占用%0，下条指令应从%1开始)
+        builder.regCounter = paramCount;
+
+        // 3. 处理参数
+        if (ctx->funcFParams()) {
+            int i = 0;
             for (auto param : ctx->funcFParams()->funcFParam()) {
                 std::string paramName = getTokenText(param->IDENT());
-                std::string argReg = "%" + std::to_string(builder.regCounter++);
+
+                // 实参的值来源于对应的寄存器 %i
+                std::string argReg = "%" + std::to_string(i);
                 currentFunction->args.push_back(argReg);
 
-                ValuePtr ptr = builder.CreateAlloca("i32"); 
+                // 构造参数的 Value 对象
                 ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
-                builder.CreateStore(argVal, ptr);
-                
-                // 参数可能是数组，但这里简单处理为 i32 标量或指针
-                // 真正的数组参数处理需要指针类型支持，这里暂时保留原样
-                symbolTable.addSymbol(paramName, Type::getInt32Ty(), ptr, false, 0);
+
+                // 在栈上分配空间 (builder.CreateAlloca 会使用 regCounter，此时已经是 i+1 了)
+                // 例如：参数是 %0，这里生成的 ptr 将是 %1
+                ValuePtr allocaPtr = builder.CreateAlloca("i32"); 
+
+                // 将参数值存入栈空间
+                builder.CreateStore(argVal, allocaPtr);
+
+                // 将栈地址注册到符号表，这样后续用到 paramName 时会加载这个地址
+                symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0);
+
+                i++;
             }
         }
-        
+
         visit(ctx->block());
+
+        if (returnType->isVoidTy()) {
+             builder.CreateVoidRet();
+        }
+
         symbolTable.exitScope();
         currentFunction = nullptr;
         return nullptr;
@@ -500,10 +555,16 @@ public:
 
     antlrcpp::Any visitReturnStmt(SysYParser::ReturnStmtContext *ctx) override {
         if (ctx->exp()) {
+            // 有返回值的 return
             ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
             if (val) builder.CreateRet(val);
         } else {
-             builder.CreateRet(new ConstantInt(0));
+            // 无返回值的 return
+            if (currentFunction && currentFunction->returnType->isVoidTy()) {
+                builder.CreateVoidRet(); // 生成 ret void
+            } else {
+                builder.CreateRet(new ConstantInt(0)); // 兼容旧逻辑，默认 ret 0
+            }
         }
         return nullptr;
     }
@@ -612,22 +673,18 @@ public:
 
     antlrcpp::Any visitFuncCallExp(SysYParser::FuncCallExpContext *ctx) override {
         std::string funcName = getTokenText(ctx->IDENT());
-        std::string argsStr = "";
+        std::vector<ValuePtr> args;
         
         if (ctx->funcRParams()) {
-            for (size_t i = 0; i < ctx->funcRParams()->exp().size(); ++i) {
-                ValuePtr argVal = std::any_cast<ValuePtr>(visit(ctx->funcRParams()->exp(i)));
-                if (i > 0) argsStr += ", ";
-                argsStr += "i32 " + argVal->to_string();
+            for (auto expCtx : ctx->funcRParams()->exp()) {
+                ValuePtr argVal = std::any_cast<ValuePtr>(visit(expCtx));
+                args.push_back(argVal);
             }
         }
-        
-        std::string name = builder.nextName();
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call", 
-            "i32 @" + funcName + "(" + argsStr + ")");
-        ValuePtr res = inst.get();
-        builder.currentBlock->addInstruction(std::move(inst));
-        return res;
+
+        // 判断是否为 SysY 库中的 void 函数
+        bool isVoid = (voidFuncs.find(funcName) != voidFuncs.end());
+        return builder.CreateCall(funcName, args, isVoid);
     }
 
     // 修复逻辑与表达式（&&）
