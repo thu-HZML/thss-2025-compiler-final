@@ -7,6 +7,8 @@
 #include <vector>
 #include <sstream>
 #include <numeric>
+#include <stack>
+#include <functional>
 #include "IR.h"
 #include "IRBuilder.h"
 #include "SymbolTable.h"
@@ -34,18 +36,49 @@ private:
     SymbolTable symbolTable;
     Function* currentFunction = nullptr;
 
+    // 循环上下文栈，用于break/continue语句
+    std::stack<BasicBlock*> condBlockStack;    // 循环条件块栈
+    std::stack<BasicBlock*> mergeBlockStack;   // 循环合并块栈
+
+    // 基本块计数器
+    int basicBlockCounter = 0;
+    std::string getUniqueBasicBlockName(const std::string& prefix) {
+        return prefix + std::to_string(basicBlockCounter++);
+    }
+
     std::string getTokenText(antlr4::tree::TerminalNode* node) {
         return node ? node->getSymbol()->getText() : "";
     }
 
     int parseInteger(const std::string& str) {
         try {
-            if (str.length() > 2 && (str.rfind("0x", 0) == 0 || str.rfind("0X", 0) == 0)) 
-                return std::stoi(str, nullptr, 16);
-            if (str.length() > 1 && str.rfind("0", 0) == 0) 
-                return std::stoi(str, nullptr, 8);
+            // 处理十六进制
+            if (str.length() > 2 && (str.rfind("0x", 0) == 0 || str.rfind("0X", 0) == 0)) {
+                // 提取十六进制部分
+                std::string hexStr = str.substr(2);
+                return std::stoi(hexStr, nullptr, 16);
+            }
+            
+            // 处理八进制
+            if (str.length() > 1 && str[0] == '0') {
+                // 检查是否包含8或9，如果有则可能是十进制
+                bool hasInvalidOctal = false;
+                for (size_t i = 1; i < str.length(); ++i) {
+                    if (str[i] == '8' || str[i] == '9') {
+                        hasInvalidOctal = true;
+                        break;
+                    }
+                }
+                if (!hasInvalidOctal) {
+                    return std::stoi(str, nullptr, 8);
+                }
+            }
+            
+            // 十进制
             return std::stoi(str);
-        } catch (...) { return 0; }
+        } catch (...) { 
+            return 0; 
+        }
     }
 
     int evalConstExp(SysYParser::ExpContext* ctx) {
@@ -71,6 +104,33 @@ private:
             int l = evalConstExp(a->exp(0));
             int r = evalConstExp(a->exp(1));
             return a->PLUS() ? (l + r) : (l - r);
+        }
+        // 添加逻辑表达式常量求值
+        if (auto land = dynamic_cast<SysYParser::LandExpContext*>(ctx)) {
+            int l = evalConstExp(land->exp(0));
+            int r = evalConstExp(land->exp(1));
+            return l && r;
+        }
+        if (auto lor = dynamic_cast<SysYParser::LorExpContext*>(ctx)) {
+            int l = evalConstExp(lor->exp(0));
+            int r = evalConstExp(lor->exp(1));
+            return l || r;
+        }
+        // 添加关系表达式常量求值
+        if (auto rel = dynamic_cast<SysYParser::RelExpContext*>(ctx)) {
+            int l = evalConstExp(rel->exp(0));
+            int r = evalConstExp(rel->exp(1));
+            if (rel->LT()) return l < r;
+            if (rel->GT()) return l > r;
+            if (rel->LE()) return l <= r;
+            if (rel->GE()) return l >= r;
+        }
+        // 添加相等性表达式常量求值
+        if (auto eq = dynamic_cast<SysYParser::EqNeqExpContext*>(ctx)) {
+            int l = evalConstExp(eq->exp(0));
+            int r = evalConstExp(eq->exp(1));
+            if (eq->EQ()) return l == r;
+            if (eq->NEQ()) return l != r;
         }
         if (auto l = dynamic_cast<SysYParser::LValExpContext*>(ctx)) {
             std::string name = getTokenText(l->lVal()->IDENT());
@@ -181,6 +241,14 @@ private:
                 target[currentIdx++] = new ConstantInt(0);
             }
         }
+    }
+
+    // 辅助函数：创建新的基本块并设置插入点
+    BasicBlock* createAndSetBasicBlock(const std::string& name) {
+        BasicBlock* bb = new BasicBlock(name);
+        currentFunction->addBasicBlock(bb);
+        builder.setInsertPoint(bb);
+        return bb;
     }
 
 public:
@@ -441,7 +509,8 @@ public:
     }
 
     antlrcpp::Any visitNumberExp(SysYParser::NumberExpContext *ctx) override {
-        int val = parseInteger(getTokenText(ctx->number()->IntConst()));
+        std::string text = getTokenText(ctx->number()->IntConst());
+        int val = parseInteger(text);
         return (ValuePtr)new ConstantInt(val);
     }
 
@@ -559,5 +628,274 @@ public:
         ValuePtr res = inst.get();
         builder.currentBlock->addInstruction(std::move(inst));
         return res;
+    }
+
+    // 修复逻辑与表达式（&&）
+    antlrcpp::Any visitLandExp(SysYParser::LandExpContext *ctx) override {
+        // 短路求值：左操作数为false则结果为false
+        
+        // 计算左操作数
+        ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
+        if (!lhs) return (ValuePtr)nullptr;
+        
+        // 常量折叠优化
+        auto lhsConst = dynamic_cast<ConstantInt*>(lhs);
+        if (lhsConst) {
+            if (lhsConst->value == 0) {
+                // 左操作数为false，短路返回0
+                return (ValuePtr)new ConstantInt(0);
+            } else {
+                // 左操作数为true，需要计算右操作数
+                ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
+                if (!rhs) return (ValuePtr)nullptr;
+                
+                auto rhsConst = dynamic_cast<ConstantInt*>(rhs);
+                if (rhsConst) {
+                    // 右操作数也是常量，直接计算结果
+                    return (ValuePtr)new ConstantInt(rhsConst->value != 0 ? 1 : 0);
+                }
+            }
+        }
+        
+        // 获取当前基本块作为左操作数计算后的块
+        BasicBlock* lhsBB = builder.getInsertBlock();
+        
+        // 创建新基本块
+        BasicBlock* rhsBB = new BasicBlock(getUniqueBasicBlockName("land.rhs"));
+        BasicBlock* mergeBB = new BasicBlock(getUniqueBasicBlockName("land.merge"));
+        
+        // 将左操作数转换为布尔值（i1类型）
+        ValuePtr zero = new ConstantInt(0);
+        ValuePtr lhsBool = builder.CreateICmp("ne", lhs, zero);
+        
+        // 条件跳转：lhs为true时计算rhs，为false时跳转到merge
+        builder.CreateCondBr(lhsBool, rhsBB, mergeBB);
+        
+        // 处理右操作数
+        currentFunction->addBasicBlock(rhsBB);
+        builder.setInsertPoint(rhsBB);
+        
+        ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
+        if (!rhs) return (ValuePtr)nullptr;
+        
+        // 将右操作数转换为布尔值（0或1）
+        ValuePtr rhsBool = builder.CreateICmp("ne", rhs, zero);
+        ValuePtr rhsResult = builder.CreateZExt(rhsBool);  // 将i1转换为i32
+        
+        builder.CreateBr(mergeBB);
+        
+        // 合并块
+        currentFunction->addBasicBlock(mergeBB);
+        builder.setInsertPoint(mergeBB);
+        
+        // 创建phi节点合并结果
+        auto phi = builder.CreatePhi(Type::getInt32Ty(), "land_result");
+        
+        // 添加前驱块的值
+        // 来自lhs为false的情况：结果为0
+        phi->addIncoming(new ConstantInt(0), lhsBB);
+        // 来自rhs计算的情况：结果为rhsResult
+        phi->addIncoming(rhsResult, rhsBB);
+        
+        return (ValuePtr)phi;
+    }
+
+    // 修复逻辑或表达式（||）
+    antlrcpp::Any visitLorExp(SysYParser::LorExpContext *ctx) override {
+        // 短路求值：左操作数为true则结果为true
+        
+        // 计算左操作数
+        ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
+        if (!lhs) return (ValuePtr)nullptr;
+        
+        // 常量折叠优化
+        auto lhsConst = dynamic_cast<ConstantInt*>(lhs);
+        if (lhsConst) {
+            if (lhsConst->value != 0) {
+                // 左操作数为true，短路返回1
+                return (ValuePtr)new ConstantInt(1);
+            } else {
+                // 左操作数为false，需要计算右操作数
+                ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
+                if (!rhs) return (ValuePtr)nullptr;
+                
+                auto rhsConst = dynamic_cast<ConstantInt*>(rhs);
+                if (rhsConst) {
+                    // 右操作数也是常量，直接计算结果
+                    return (ValuePtr)new ConstantInt(rhsConst->value != 0 ? 1 : 0);
+                }
+            }
+        }
+        
+        // 获取当前基本块作为左操作数计算后的块
+        BasicBlock* lhsBB = builder.getInsertBlock();
+        
+        // 创建新基本块
+        BasicBlock* rhsBB = new BasicBlock(getUniqueBasicBlockName("lor.rhs"));
+        BasicBlock* mergeBB = new BasicBlock(getUniqueBasicBlockName("lor.merge"));
+        
+        // 将左操作数转换为布尔值（i1类型）
+        ValuePtr zero = new ConstantInt(0);
+        ValuePtr lhsBool = builder.CreateICmp("ne", lhs, zero);
+        
+        // 条件跳转：lhs为true时跳转到merge，为false时计算rhs
+        builder.CreateCondBr(lhsBool, mergeBB, rhsBB);
+        
+        // 处理右操作数
+        currentFunction->addBasicBlock(rhsBB);
+        builder.setInsertPoint(rhsBB);
+        
+        ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
+        if (!rhs) return (ValuePtr)nullptr;
+        
+        // 将右操作数转换为布尔值（0或1）
+        ValuePtr rhsBool = builder.CreateICmp("ne", rhs, zero);
+        ValuePtr rhsResult = builder.CreateZExt(rhsBool);  // 将i1转换为i32
+        
+        builder.CreateBr(mergeBB);
+        
+        // 合并块
+        currentFunction->addBasicBlock(mergeBB);
+        builder.setInsertPoint(mergeBB);
+        
+        // 创建phi节点合并结果
+        auto phi = builder.CreatePhi(Type::getInt32Ty(), "lor_result");
+        
+        // 添加前驱块的值
+        // 来自lhs为true的情况：结果为1
+        phi->addIncoming(new ConstantInt(1), lhsBB);
+        // 来自rhs计算的情况：结果为rhsResult
+        phi->addIncoming(rhsResult, rhsBB);
+        
+        return (ValuePtr)phi;
+    }
+
+    // 新增：if语句（需要支持else）
+    antlrcpp::Any visitIfStmt(SysYParser::IfStmtContext *ctx) override {
+        static int ifCounter = 0;
+        int currentIf = ifCounter++;
+
+        // 计算条件表达式
+        ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->cond()));
+        if (!cond) return nullptr;
+        
+        // 将条件转换为布尔值
+        ValuePtr zero = new ConstantInt(0);
+        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        
+        // 创建基本块
+        BasicBlock* thenBB = new BasicBlock("if.then" + std::to_string(currentIf));
+        BasicBlock* elseBB = ctx->ELSE() ? new BasicBlock("if.else" + std::to_string(currentIf)) : nullptr;
+        BasicBlock* mergeBB = new BasicBlock("if.merge" + std::to_string(currentIf));
+        
+        // 条件跳转
+        if (elseBB) {
+            builder.CreateCondBr(condBool, thenBB, elseBB);
+        } else {
+            builder.CreateCondBr(condBool, thenBB, mergeBB);
+        }
+        
+        // then分支
+        currentFunction->addBasicBlock(thenBB);
+        builder.setInsertPoint(thenBB);
+        visit(ctx->stmt(0));  // 处理then语句
+        builder.CreateBr(mergeBB);  // 跳转到合并块
+        
+        // else分支（如果有）
+        if (elseBB) {
+            currentFunction->addBasicBlock(elseBB);
+            builder.setInsertPoint(elseBB);
+            visit(ctx->stmt(1));  // 处理else语句
+            builder.CreateBr(mergeBB);
+        }
+        
+        // 合并块
+        currentFunction->addBasicBlock(mergeBB);
+        builder.setInsertPoint(mergeBB);
+        
+        return nullptr;
+    }
+
+    // 新增：while语句
+    antlrcpp::Any visitWhileStmt(SysYParser::WhileStmtContext *ctx) override {
+        // 保存当前循环上下文
+        BasicBlock* prevCondBB = condBlockStack.empty() ? nullptr : condBlockStack.top();
+        BasicBlock* prevMergeBB = mergeBlockStack.empty() ? nullptr : mergeBlockStack.top();
+        
+        // 创建循环基本块
+        BasicBlock* condBB = new BasicBlock("while.cond");
+        BasicBlock* bodyBB = new BasicBlock("while.body");
+        BasicBlock* mergeBB = new BasicBlock("while.merge");
+        
+        // 设置当前循环上下文
+        condBlockStack.push(condBB);
+        mergeBlockStack.push(mergeBB);
+        
+        // 跳转到条件判断
+        builder.CreateBr(condBB);
+        
+        // 条件块
+        currentFunction->addBasicBlock(condBB);
+        builder.setInsertPoint(condBB);
+        ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->cond()));
+        if (!cond) return nullptr;
+        
+        ValuePtr zero = new ConstantInt(0);
+        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        builder.CreateCondBr(condBool, bodyBB, mergeBB);
+        
+        // 循环体
+        currentFunction->addBasicBlock(bodyBB);
+        builder.setInsertPoint(bodyBB);
+        visit(ctx->stmt());  // 处理循环体
+        builder.CreateBr(condBB);  // 跳回条件判断
+        
+        // 合并块
+        currentFunction->addBasicBlock(mergeBB);
+        builder.setInsertPoint(mergeBB);
+        
+        // 恢复之前的循环上下文
+        condBlockStack.pop();
+        mergeBlockStack.pop();
+        if (prevCondBB) condBlockStack.push(prevCondBB);
+        if (prevMergeBB) mergeBlockStack.push(prevMergeBB);
+        
+        return nullptr;
+    }
+
+    // 新增：break语句
+    antlrcpp::Any visitBreakStmt(SysYParser::BreakStmtContext *ctx) override {
+        if (mergeBlockStack.empty()) {
+            // 错误：break不在循环内
+            std::cerr << "Error: break statement not within a loop" << std::endl;
+            return nullptr;
+        }
+        
+        builder.CreateBr(mergeBlockStack.top());
+        
+        // 创建不可达块（break后的代码不会被执行）
+        BasicBlock* unreachable = new BasicBlock("break.unreachable");
+        currentFunction->addBasicBlock(unreachable);
+        builder.setInsertPoint(unreachable);
+        
+        return nullptr;
+    }
+
+    // 新增：continue语句
+    antlrcpp::Any visitContinueStmt(SysYParser::ContinueStmtContext *ctx) override {
+        if (condBlockStack.empty()) {
+            // 错误：continue不在循环内
+            std::cerr << "Error: continue statement not within a loop" << std::endl;
+            return nullptr;
+        }
+        
+        builder.CreateBr(condBlockStack.top());
+        
+        // 创建不可达块（continue后的代码不会被执行）
+        BasicBlock* unreachable = new BasicBlock("continue.unreachable");
+        currentFunction->addBasicBlock(unreachable);
+        builder.setInsertPoint(unreachable);
+        
+        return nullptr;
     }
 };

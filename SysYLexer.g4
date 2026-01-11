@@ -15,10 +15,11 @@ RETURN: 'return';
 IDENT: [a-zA-Z_] [a-zA-Z_0-9]*;
 
 // Constants (核心修复：添加十六进制和八进制支持)
-DecimalConst: [1-9] [0-9]*;
-OctalConst: '0' [0-7]*;
-HexConst: ('0x' | '0X') [0-9a-fA-F]+;
-IntConst: DecimalConst | OctalConst | HexConst;
+IntConst: 
+    ('0x' | '0X') [0-9a-fA-F]+
+    | '0' [0-7]*
+    | [1-9] [0-9]*
+    ;
 
 // Operators
 L_PAREN: '(';
