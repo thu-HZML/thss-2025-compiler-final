@@ -59,6 +59,8 @@ public:
 
     virtual std::any visitWhileStmt(SysYParser::WhileStmtContext *context) = 0;
 
+    virtual std::any visitForStmt(SysYParser::ForStmtContext *context) = 0;
+
     virtual std::any visitBreakStmt(SysYParser::BreakStmtContext *context) = 0;
 
     virtual std::any visitContinueStmt(SysYParser::ContinueStmtContext *context) = 0;

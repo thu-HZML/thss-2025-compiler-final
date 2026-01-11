@@ -95,6 +95,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitForStmt(SysYParser::ForStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitBreakStmt(SysYParser::BreakStmtContext *ctx) override {
     return visitChildren(ctx);
   }
