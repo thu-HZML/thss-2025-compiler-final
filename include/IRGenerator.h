@@ -426,11 +426,27 @@ public:
             }
         }
 
-        visit(ctx->block());
-
-        if (returnType->isVoidTy())
+        // 修改：不调用 visit(ctx->block()) 以避免创建双重作用域
+        // 而是直接遍历 block 中的 item，使参数和函数体在同一作用域
+        if (ctx->block())
         {
-            builder.CreateVoidRet();
+            for (auto item : ctx->block()->blockItem())
+            {
+                visit(item);
+            }
+        }
+
+        // 检查当前基本块是否已终止，未终止则补充 return 指令
+        if (builder.getInsertBlock() && !builder.getInsertBlock()->isTerminated())
+        {
+            if (returnType->isVoidTy())
+            {
+                builder.CreateVoidRet();
+            }
+            else
+            {
+                builder.CreateRet(new ConstantInt(0));
+            }
         }
 
         symbolTable.exitScope();
