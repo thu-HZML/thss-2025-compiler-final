@@ -196,15 +196,17 @@ private:
         std::string name = getTokenText(ctx->IDENT());
         SymbolInfo *info = symbolTable.lookup(name);
         if (!info)
-        {
             return nullptr;
-        }
 
         ValuePtr base = info->value;
-        if (!info->isArray || ctx->L_BRACK().empty())
+
+        if (info->isPointer)
         {
-            return base;
+            base = builder.CreatePointerLoad(base);
         }
+
+        if (!info->isArray || ctx->L_BRACK().empty())
+            return base;
 
         ValuePtr offset = nullptr;
         size_t n = ctx->exp().size();
@@ -215,9 +217,7 @@ private:
 
             int stride = 1;
             for (size_t k = i + 1; k < info->dims.size(); ++k)
-            {
                 stride *= info->dims[k];
-            }
 
             ValuePtr term = idx;
             if (stride > 1)
@@ -226,24 +226,26 @@ private:
                 term = builder.CreateBinary("mul", idx, strideVal);
             }
 
-            if (offset == nullptr)
-            {
+            if (!offset)
                 offset = term;
-            }
             else
-            {
                 offset = builder.CreateBinary("add", offset, term);
-            }
         }
 
         if (!offset)
             offset = new ConstantInt(0);
 
-        int totalSize = 1;
-        for (int d : info->dims)
-            totalSize *= d;
-
-        return builder.CreateGEP(base, offset, totalSize);
+        if (info->isPointer)
+        {
+            return builder.CreatePointerGEP(base, offset);
+        }
+        else
+        {
+            int totalSize = 1;
+            for (int d : info->dims)
+                totalSize *= d;
+            return builder.CreateGEP(base, offset, totalSize);
+        }
     }
 
     // Helper: 计算当前维度的 Block Size
@@ -325,6 +327,29 @@ private:
         }
     }
 
+    // 辅助函数：在入口块创建 Alloca 指令
+    ValuePtr createEntryBlockAlloca(Type *type, const std::string &name = "")
+    {
+        BasicBlock *entryBB = currentFunction->blockList.front().get();
+        static int allocCounter = 0;
+        int id = allocCounter++;
+        // 使用非数字名称以避免 LLVM 编号顺序约束
+        // 必须以 % 开头
+        std::string varName = "%alloc_" + std::to_string(id);
+        if (!name.empty()) {
+            // 简单的清理名称中的非字母数字字符（如果需要），这里假设 name 合法
+            // 添加前缀区别于普通变量
+            varName = "%" + name + "_addr_" + std::to_string(id); 
+        }
+
+        auto allocInst = std::make_unique<AllocaInst>(type, varName);
+        ValuePtr data = allocInst.get();
+        
+        // 插入到入口块的起始位置
+        entryBB->instList.insert(entryBB->instList.begin(), std::move(allocInst));
+        return data;
+    }
+
     // 辅助函数：创建新的基本块并设置插入点
     BasicBlock *createAndSetBasicBlock(const std::string &name)
     {
@@ -404,24 +429,41 @@ public:
             for (auto param : ctx->funcFParams()->funcFParam())
             {
                 std::string paramName = getTokenText(param->IDENT());
-
-                // 实参的值来源于对应的寄存器 %i
                 std::string argReg = "%" + std::to_string(i);
+
+                // Check for array dimensions
+                bool isArray = false;
+                std::vector<int> dims;
+                if (!param->L_BRACK().empty())
+                {
+                    isArray = true;
+                    dims.push_back(0); // Unknown first dimension
+                    for (auto expr : param->exp())
+                    {
+                        dims.push_back(evalConstExp(expr));
+                    }
+                }
+
                 currentFunction->args.push_back(argReg);
 
-                // 构造参数的 Value 对象
-                ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
-
-                // 在栈上分配空间 (builder.CreateAlloca 会使用 regCounter，此时已经是 i+1 了)
-                // 例如：参数是 %0，这里生成的 ptr 将是 %1
-                ValuePtr allocaPtr = builder.CreateAlloca("i32");
-
-                // 将参数值存入栈空间
-                builder.CreateStore(argVal, allocaPtr);
-
-                // 将栈地址注册到符号表，这样后续用到 paramName 时会加载这个地址
-                symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0);
-
+                if (isArray)
+                {
+                    currentFunction->argTypes.push_back(Type::getPointerTy(Type::getInt32Ty()));
+                    // Array/Pointer parameter
+                    ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
+                    ValuePtr allocaPtr = builder.CreateAlloca("i32*");
+                    builder.CreatePointerStore(argVal, allocaPtr);
+                    symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0, true, dims, true);
+                }
+                else
+                {
+                    currentFunction->argTypes.push_back(Type::getInt32Ty());
+                    // Scalar parameter
+                    ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
+                    ValuePtr allocaPtr = builder.CreateAlloca("i32");
+                    builder.CreateStore(argVal, allocaPtr);
+                    symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0);
+                }
                 i++;
             }
         }
@@ -514,8 +556,9 @@ public:
 
                 if (currentFunction)
                 {
-                    std::string typeStr = "[" + std::to_string(totalSize) + " x i32]";
-                    ValuePtr ptr = builder.CreateAlloca(typeStr);
+                    // 使用 createEntryBlockAlloca 替代 builder.CreateAlloca 防止在循环中并不停分配栈空间
+                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, true, dims);
 
                     // 局部常量数组必须全部存储，包括 0 值，因为 alloca 内存未初始化
@@ -552,7 +595,7 @@ public:
 
             if (currentFunction)
             {
-                ValuePtr ptr = builder.CreateAlloca("i32");
+                ValuePtr ptr = createEntryBlockAlloca(Type::getInt32Ty());
                 builder.CreateStore(val, ptr);
                 symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, val);
             }
@@ -587,8 +630,9 @@ public:
 
                 if (currentFunction)
                 {
-                    std::string typeStr = "[" + std::to_string(totalSize) + " x i32]";
-                    ValuePtr ptr = builder.CreateAlloca(typeStr);
+                    // 使用 createEntryBlockAlloca
+                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
+                    ValuePtr ptr = createEntryBlockAlloca(arrType);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0, true, dims);
 
                     if (def->ASSIGN() && def->initVal())
@@ -683,7 +727,7 @@ public:
             // 标量处理
             if (currentFunction)
             {
-                ValuePtr ptr = builder.CreateAlloca("i32");
+                ValuePtr ptr = createEntryBlockAlloca(Type::getInt32Ty());
                 if (def->ASSIGN() && def->initVal()->exp())
                 {
                     ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
@@ -750,10 +794,30 @@ public:
         }
 
         ValuePtr ptr = getLValPointer(ctx->lVal());
-        if (ptr)
-            return builder.CreateLoad(ptr);
+        if (!ptr)
+            return (ValuePtr) new ConstantInt(0);
 
-        return (ValuePtr) new ConstantInt(0);
+        if (info && info->isArray)
+        {
+            int indices = ctx->lVal()->L_BRACK().size();
+            int dims = info->dims.size();
+            if (indices < dims)
+            {
+                // If ptr is [N x i32]*, decay it to i32*
+                // This only happens for global/local arrays when accessed without brackets
+                if (!info->isPointer && ctx->lVal()->L_BRACK().empty())
+                {
+                    int totalSize = 1;
+                    for (int d : info->dims)
+                        totalSize *= d;
+                    return builder.CreateGEP(ptr, new ConstantInt(0), totalSize);
+                }
+                // Otherwise ptr is already i32* (either param or result of GEP)
+                return ptr;
+            }
+        }
+
+        return builder.CreateLoad(ptr);
     }
 
     antlrcpp::Any visitAddSubExp(SysYParser::AddSubExpContext *ctx) override
@@ -1155,10 +1219,6 @@ public:
 
         // 恢复之前的循环上下文
         condBlockStack.pop();
-        mergeBlockStack.pop();
-        if (prevCondBB)
-            condBlockStack.push(prevCondBB);
-        if (prevMergeBB)
             mergeBlockStack.push(prevMergeBB);
 
         return nullptr;
