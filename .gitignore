@@ -5,3 +5,6 @@
 
 build/
 dist/
+
+# test output
+test/resources/functional/*.ll
