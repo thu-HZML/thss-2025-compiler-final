@@ -8,6 +8,7 @@ IF: 'if';
 ELSE: 'else';
 WHILE: 'while';
 FOR: 'for';
+STRUCT: 'struct';
 BREAK: 'break';
 CONTINUE: 'continue';
 RETURN: 'return';
@@ -28,6 +29,7 @@ L_BRACK: '[';
 R_BRACK: ']';
 L_BRACE: '{';
 R_BRACE: '}';
+DOT: '.';
 COMMA: ',';
 SEMICOLON: ';';
 

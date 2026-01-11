@@ -4,13 +4,19 @@ options {
 	tokenVocab = SysYLexer;
 }
 
-compUnit: (decl | funcDef)* EOF;
+compUnit: (decl | funcDef | structDef)* EOF;
 
-decl: constDecl | varDecl;
+decl: constDecl | varDecl | structDecl;
+
+structDecl: structDef;
+
+structDef: STRUCT IDENT L_BRACE memberDef* R_BRACE SEMICOLON;
+
+memberDef: bType IDENT (L_BRACK constExp R_BRACK)* SEMICOLON;
 
 constDecl: CONST bType constDef (COMMA constDef)* SEMICOLON;
 
-bType: INT;
+bType: INT | STRUCT IDENT;
 
 constDef: IDENT (L_BRACK constExp R_BRACK)* ASSIGN constInitVal;
 
@@ -70,7 +76,7 @@ exp:
 
 cond: exp;
 
-lVal: IDENT (L_BRACK exp R_BRACK)*;
+lVal: IDENT (L_BRACK exp R_BRACK | DOT IDENT)*;
 
 number: IntConst;
 

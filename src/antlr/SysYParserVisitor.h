@@ -23,6 +23,12 @@ public:
 
     virtual std::any visitDecl(SysYParser::DeclContext *context) = 0;
 
+    virtual std::any visitStructDecl(SysYParser::StructDeclContext *context) = 0;
+
+    virtual std::any visitStructDef(SysYParser::StructDefContext *context) = 0;
+
+    virtual std::any visitMemberDef(SysYParser::MemberDefContext *context) = 0;
+
     virtual std::any visitConstDecl(SysYParser::ConstDeclContext *context) = 0;
 
     virtual std::any visitBType(SysYParser::BTypeContext *context) = 0;

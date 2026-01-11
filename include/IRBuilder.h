@@ -46,7 +46,7 @@ public:
     // 2. Store
     void CreateStore(ValuePtr val, ValuePtr ptr)
     {
-        std::string args = "i32 " + val->to_string() + ", i32* " + ptr->to_string() + ", align 4";
+        std::string args = val->getType()->toString() + " " + val->to_string() + ", " + ptr->getType()->toString() + " " + ptr->to_string() + ", align 4";
         currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
     }
 
@@ -60,8 +60,10 @@ public:
     ValuePtr CreateLoad(ValuePtr ptr)
     {
         std::string name = nextName();
-        std::string args = "i32, i32* " + ptr->to_string() + ", align 4";
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "load", args);
+        Type *valType = static_cast<Type *>(ptr->getType())->elementType;
+
+        std::string args = valType->toString() + ", " + ptr->getType()->toString() + " " + ptr->to_string() + ", align 4";
+        auto inst = std::make_unique<Instruction>(valType, name, "load", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
@@ -70,7 +72,7 @@ public:
     // 4. Ret
     void CreateRet(ValuePtr val)
     {
-        std::string args = "i32 " + val->to_string();
+        std::string args = val->getType()->toString() + " " + val->to_string();
         currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", args));
     }
 
@@ -122,6 +124,25 @@ public:
         std::string args = "inbounds " + type + ", " + type + "* " + ptr->to_string() + ", i32 0, i32 " + idx->to_string();
 
         auto inst = std::make_unique<Instruction>(Type::getPointerTy(Type::getInt32Ty()), name, "getelementptr", args);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    ValuePtr CreateInBoundsGEP(ValuePtr ptr, const std::vector<ValuePtr> &indices, Type *elementType)
+    {
+        std::string name = nextName();
+        // ptr should be pointer type
+        Type *baseType = static_cast<Type *>(ptr->getType())->elementType;
+
+        std::string args = "inbounds " + baseType->toString() + ", " + ptr->getType()->toString() + " " + ptr->to_string();
+        for (auto idx : indices)
+        {
+            args += ", " + idx->getType()->toString() + " " + idx->to_string();
+        }
+
+        Type *resultType = Type::getPointerTy(elementType);
+        auto inst = std::make_unique<Instruction>(resultType, name, "getelementptr", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;

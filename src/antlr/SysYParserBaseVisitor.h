@@ -23,6 +23,18 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitStructDecl(SysYParser::StructDeclContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStructDef(SysYParser::StructDefContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitMemberDef(SysYParser::MemberDefContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitConstDecl(SysYParser::ConstDeclContext *ctx) override {
     return visitChildren(ctx);
   }

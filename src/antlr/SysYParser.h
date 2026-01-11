@@ -13,19 +13,21 @@ class  SysYParser : public antlr4::Parser {
 public:
   enum {
     CONST = 1, INT = 2, VOID = 3, IF = 4, ELSE = 5, WHILE = 6, FOR = 7, 
-    BREAK = 8, CONTINUE = 9, RETURN = 10, IDENT = 11, IntConst = 12, L_PAREN = 13, 
-    R_PAREN = 14, L_BRACK = 15, R_BRACK = 16, L_BRACE = 17, R_BRACE = 18, 
-    COMMA = 19, SEMICOLON = 20, PLUS = 21, MINUS = 22, MUL = 23, DIV = 24, 
-    MOD = 25, ASSIGN = 26, EQ = 27, NEQ = 28, LT = 29, GT = 30, LE = 31, 
-    GE = 32, AND = 33, OR = 34, NOT = 35, WS = 36, LINE_COMMENT = 37, BLOCK_COMMENT = 38
+    STRUCT = 8, BREAK = 9, CONTINUE = 10, RETURN = 11, IDENT = 12, IntConst = 13, 
+    L_PAREN = 14, R_PAREN = 15, L_BRACK = 16, R_BRACK = 17, L_BRACE = 18, 
+    R_BRACE = 19, DOT = 20, COMMA = 21, SEMICOLON = 22, PLUS = 23, MINUS = 24, 
+    MUL = 25, DIV = 26, MOD = 27, ASSIGN = 28, EQ = 29, NEQ = 30, LT = 31, 
+    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, WS = 38, LINE_COMMENT = 39, 
+    BLOCK_COMMENT = 40
   };
 
   enum {
-    RuleCompUnit = 0, RuleDecl = 1, RuleConstDecl = 2, RuleBType = 3, RuleConstDef = 4, 
-    RuleConstInitVal = 5, RuleVarDecl = 6, RuleVarDef = 7, RuleInitVal = 8, 
-    RuleFuncDef = 9, RuleFuncType = 10, RuleFuncFParams = 11, RuleFuncFParam = 12, 
-    RuleBlock = 13, RuleBlockItem = 14, RuleStmt = 15, RuleExp = 16, RuleCond = 17, 
-    RuleLVal = 18, RuleNumber = 19, RuleFuncRParams = 20, RuleConstExp = 21
+    RuleCompUnit = 0, RuleDecl = 1, RuleStructDecl = 2, RuleStructDef = 3, 
+    RuleMemberDef = 4, RuleConstDecl = 5, RuleBType = 6, RuleConstDef = 7, 
+    RuleConstInitVal = 8, RuleVarDecl = 9, RuleVarDef = 10, RuleInitVal = 11, 
+    RuleFuncDef = 12, RuleFuncType = 13, RuleFuncFParams = 14, RuleFuncFParam = 15, 
+    RuleBlock = 16, RuleBlockItem = 17, RuleStmt = 18, RuleExp = 19, RuleCond = 20, 
+    RuleLVal = 21, RuleNumber = 22, RuleFuncRParams = 23, RuleConstExp = 24
   };
 
   explicit SysYParser(antlr4::TokenStream *input);
@@ -47,6 +49,9 @@ public:
 
   class CompUnitContext;
   class DeclContext;
+  class StructDeclContext;
+  class StructDefContext;
+  class MemberDefContext;
   class ConstDeclContext;
   class BTypeContext;
   class ConstDefContext;
@@ -77,6 +82,8 @@ public:
     DeclContext* decl(size_t i);
     std::vector<FuncDefContext *> funcDef();
     FuncDefContext* funcDef(size_t i);
+    std::vector<StructDefContext *> structDef();
+    StructDefContext* structDef(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -91,6 +98,7 @@ public:
     virtual size_t getRuleIndex() const override;
     ConstDeclContext *constDecl();
     VarDeclContext *varDecl();
+    StructDeclContext *structDecl();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -98,6 +106,59 @@ public:
   };
 
   DeclContext* decl();
+
+  class  StructDeclContext : public antlr4::ParserRuleContext {
+  public:
+    StructDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    StructDefContext *structDef();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  StructDeclContext* structDecl();
+
+  class  StructDefContext : public antlr4::ParserRuleContext {
+  public:
+    StructDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *STRUCT();
+    antlr4::tree::TerminalNode *IDENT();
+    antlr4::tree::TerminalNode *L_BRACE();
+    antlr4::tree::TerminalNode *R_BRACE();
+    antlr4::tree::TerminalNode *SEMICOLON();
+    std::vector<MemberDefContext *> memberDef();
+    MemberDefContext* memberDef(size_t i);
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  StructDefContext* structDef();
+
+  class  MemberDefContext : public antlr4::ParserRuleContext {
+  public:
+    MemberDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    BTypeContext *bType();
+    antlr4::tree::TerminalNode *IDENT();
+    antlr4::tree::TerminalNode *SEMICOLON();
+    std::vector<antlr4::tree::TerminalNode *> L_BRACK();
+    antlr4::tree::TerminalNode* L_BRACK(size_t i);
+    std::vector<ConstExpContext *> constExp();
+    ConstExpContext* constExp(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> R_BRACK();
+    antlr4::tree::TerminalNode* R_BRACK(size_t i);
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  MemberDefContext* memberDef();
 
   class  ConstDeclContext : public antlr4::ParserRuleContext {
   public:
@@ -123,6 +184,8 @@ public:
     BTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *INT();
+    antlr4::tree::TerminalNode *STRUCT();
+    antlr4::tree::TerminalNode *IDENT();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -616,13 +679,16 @@ public:
   public:
     LValContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *IDENT();
+    std::vector<antlr4::tree::TerminalNode *> IDENT();
+    antlr4::tree::TerminalNode* IDENT(size_t i);
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<ExpContext *> exp();
     ExpContext* exp(size_t i);
     std::vector<antlr4::tree::TerminalNode *> R_BRACK();
     antlr4::tree::TerminalNode* R_BRACK(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> DOT();
+    antlr4::tree::TerminalNode* DOT(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
