@@ -261,49 +261,52 @@ private:
         }
 
         ValuePtr base = info->value;
-        if (info->isPointer) {
-            base = builder.CreatePointerLoad(base);
-        }
-
-        if (!info->isArray || ctx->L_BRACK().empty()) return base;
-
+        
         // 1. 检查修饰符
-        bool isDereference = (ctx->pointerPrefix() != nullptr); // 检查 *p
-        bool hasBrackets = !ctx->L_BRACK().empty();             // 检查 p[i]
+        bool isDereference = (ctx->pointerPrefix() != nullptr); // 检查是否有 *
+        bool hasBrackets = !ctx->L_BRACK().empty();             // 检查是否有 [i]
 
         // 2. 处理指针变量 (int *p)
         if (info->isPointer)
         {
-            // 关键逻辑：
-            // 如果既没有 * 也没有 [] (例如: p = &b)，说明我们要操作 p 变量本身(i32**)
-            // 此时直接返回 base (i32**)
+            // 情况 A: p = &b (操作指针变量本身)
+            // 没有 * 且没有 [] -> 返回 p 在栈上的地址 (i32**)
             if (!isDereference && !hasBrackets) {
                 return base;
             }
             
-            // 否则 (例如: *p 或 p[i])，我们需要 p 指向的地址
-            // 先从栈上 Load 出 p 的值 (i32*)
+            // 情况 B: *p = ... 或 p[i] = ... (操作指针指向的目标)
+            // 需要先读取 p 的值，得到它指向的地址 (i32*)
             base = builder.CreateLoad(base); 
         }
 
-        // 3. 处理显式解引用 (*p)
+        // 3. 处理显式解引用 (*p 或 *arr)
         if (isDereference)
         {
-            // base 已经是 i32*，直接返回作为地址
+            // 如果是 *p，此时 base 已经是 i32* (指向 int 的地址)，直接返回即可
+            // 如果是 *arr (数组名解引用)，base 是 [n x i32]*
+            if (info->isArray && !info->isPointer) {
+                 // 数组 *arr 等价于 arr[0]
+                 return builder.CreateGEP(base, ConstantInt::get(0), 0); // 这里的 0 是假参数，实际 GEP 会处理
+                 // 实际上对于一维数组，我们需要 decay 到指针
+                 Type* arrType = base->getType()->elementType; // [n x i32]
+                 return builder.CreateGEP(base, ConstantInt::get(0), arrType->arraySize);
+            }
             return base;
         }
 
         // 4. 处理数组下标 (a[i] 或 p[i])
-        if (!info->isArray || ctx->L_BRACK().empty())
-            return base; // 如果是指针且无下标，直接返回
+        // 如果没有下标，直接返回
+        if (ctx->L_BRACK().empty()) {
+            // 此时 base 可能是 [10 x i32]* (数组) 或 i32* (指针)
+            return base;
+        }
 
-        // ... (保留原本的数组下标计算逻辑) ...
         ValuePtr offset = nullptr;
         size_t n = ctx->exp().size();
 
         for (size_t i = 0; i < n; ++i) {
             ValuePtr idx = std::any_cast<ValuePtr>(visit(ctx->exp(i)));
-            // 数组下标必须是 int
             idx = ensureType(idx, Type::getInt32Ty());
 
             int stride = 1;
@@ -319,13 +322,14 @@ private:
             if (!offset) offset = term;
             else offset = builder.CreateBinary("add", offset, term);
         }
-        if (!offset) offset = new ConstantInt(0);
 
         if (!offset) offset = ConstantInt::get(0);
 
         if (info->isPointer) {
+            // 指针下标 p[i]: base 已经是 i32*，直接 GEP
             return builder.CreatePointerGEP(base, offset);
         } else {
+            // 数组下标 a[i]: base 是 [N x i32]*
             int totalSize = 1;
             for (int d : info->dims) totalSize *= d;
             return builder.CreateGEP(base, offset, totalSize);
@@ -488,24 +492,29 @@ public:
 
     antlrcpp::Any visitCompUnit(SysYParser::CompUnitContext *ctx) override
     {
-        // --- 新增：预扫描 Pass 1 ---
-        // 先遍历所有函数定义，识别出哪些是 void 函数
-        // 这样即使函数定义在后面，调用时也能正确生成 call void 指令
+        // --- Pass 1: 扫描所有函数定义，注册函数类型 ---
+        // 这解决了 main 调用后面定义的函数时类型未知的问题
         for (auto child : ctx->children)
         {
             if (auto func = dynamic_cast<SysYParser::FuncDefContext *>(child))
             {
                 std::string name = getTokenText(func->IDENT());
                 std::string typeStr = func->funcType()->getText();
-                if (typeStr == "void")
-                {
+                
+                Type* retType = Type::getInt32Ty();
+                if (typeStr == "void") {
+                    retType = Type::getVoidTy();
                     voidFuncs.insert(name);
+                } else if (typeStr == "float") {
+                    retType = Type::getFloatTy();
                 }
+                
+                // 记录函数返回类型
+                funcRetTypes[name] = retType;
             }
         }
 
-        // --- 原有逻辑：Pass 2 ---
-        // 真正生成代码
+        // --- Pass 2: 生成代码 ---
         for (auto child : ctx->children)
         {
             if (auto func = dynamic_cast<SysYParser::FuncDefContext *>(child))
@@ -541,101 +550,75 @@ public:
         currentFunction->addBasicBlock(entryBB);
         builder.setInsertPoint(entryBB);
         builder.reset();
-        // 2. 将寄存器计数器跳过参数占用的编号
-        builder.regCounter = paramCount;
 
         // 2. 处理参数
+        int argIndex = 0; // 用于追踪参数寄存器编号
         if (ctx->funcFParams()) {
-            int i = 0;
             for (auto param : ctx->funcFParams()->funcFParam()) {
                 std::string paramName = getTokenText(param->IDENT());
-                std::string argReg = "%arg" + std::to_string(i); // 使用别名更清晰
+                std::string argReg = "%arg" + std::to_string(argIndex); // 参数的原始值
 
-                // 识别参数类型
+                // 识别参数基础类型
                 Type* paramType = Type::getInt32Ty();
                 if (param->bType()->getText() == "float") paramType = Type::getFloatTy();
 
-                bool isArray = !param->L_BRACK().empty();
-                std::vector<int> dims;
-                if (isArray) {
-                    dims.push_back(0); // 第一维省略
-                    for (auto expr : param->exp()) dims.push_back(evalConstExp(expr));
-                
-                // 检查是否是指针定义 (int *p)
-                bool isPtrDecl = (param->pointerPrefix() != nullptr);
-                
                 // 检查是否是数组定义 (int a[])
                 bool isArrayDecl = !param->L_BRACK().empty();
-                
                 std::vector<int> dims;
-                if (isArrayDecl)
-                {
-                    dims.push_back(0); // Unknown first dimension
-                    for (auto expr : param->exp())
-                    {
+                if (isArrayDecl) {
+                    dims.push_back(0); // 第一维省略
+                    for (auto expr : param->exp()) {
                         dims.push_back(evalConstExp(expr));
                     }
                 }
 
-                currentFunction->args.push_back(argReg); // 记录参数名用于打印
+                // 检查是否是指针定义 (int *p)
+                bool isPtrDecl = (param->pointerPrefix() != nullptr);
 
-                if (isArray) {
-                    // 数组参数作为指针传递
+                currentFunction->args.push_back(argReg); // 记录参数名
+
+                // 逻辑分支：处理不同类型的参数
+                if (isArrayDecl || isPtrDecl) {
+                    // 数组作为指针传递，或者显式指针参数
+                    // 参数类型在 IR 层面上是 int* 或 float*
                     Type* ptrType = Type::getPointerTy(paramType);
                     currentFunction->argTypes.push_back(ptrType);
-
-                    ValuePtr argVal = new Value(ptrType, argReg);
-                    ValuePtr allocaPtr = builder.CreateAlloca(ptrType);
-                    builder.CreatePointerStore(argVal, allocaPtr);
-                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, true, dims, true);
-                } else {
-                    // 标量参数
-                    currentFunction->argTypes.push_back(paramType);
-                    ValuePtr argVal = new Value(paramType, argReg);
-                    ValuePtr allocaPtr = builder.CreateAlloca(paramType);
-                if (isPtrDecl || isArrayDecl)
-                {
-                    // 参数是 i32* 类型
-                    Type* ptrType = Type::getPointerTy(Type::getInt32Ty());
-                    currentFunction->argTypes.push_back(ptrType);
                     
                     ValuePtr argVal = new Value(ptrType, argReg);
                     
-                    // --- 修复点 1: 使用 createEntryBlockAlloca ---
-                    // 以前是: builder.CreateAlloca("i32*"); (类型错误)
-                    // 现在改为:
+                    // 在栈上分配空间存储参数地址 (i32** 或 float**)
                     ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, paramName + "_addr");
                     
-                    builder.CreatePointerStore(argVal, allocaPtr);
-                    symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0, isArrayDecl, dims, true);
-                }
-                else
-                {
-                    // 参数是 i32 类型
-                    currentFunction->argTypes.push_back(Type::getInt32Ty());
+                    // 将参数值存入栈
+                    builder.CreateStore(argVal, allocaPtr); // 注意：这里使用了通用的 CreateStore
+
+                    // 注册到符号表
+                    // 注意 addSymbol 签名: (name, type, val, isConst, intVal, floatVal, isArray, dims, isPointer)
+                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, isArrayDecl, dims, true);
+                } 
+                else {
+                    // 普通标量参数 (int 或 float)
+                    currentFunction->argTypes.push_back(paramType);
+                    ValuePtr argVal = new Value(paramType, argReg);
                     
-                    ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
+                    // 在栈上分配空间
+                    ValuePtr allocaPtr = createEntryBlockAlloca(paramType, paramName + "_addr");
                     
-                    // --- 修复点 2: 使用 createEntryBlockAlloca ---
-                    // 以前是: builder.CreateAlloca("i32");
-                    // 现在改为:
-                    ValuePtr allocaPtr = createEntryBlockAlloca(Type::getInt32Ty(), paramName + "_addr");
-                    
+                    // 存入栈
                     builder.CreateStore(argVal, allocaPtr);
-                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false); // 利用默认参数
+                    
+                    // 注册到符号表
+                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, false, {}, false);
                 }
-                // --- 修改结束 ---
                 
-                i++;
+                argIndex++;
             }
-            builder.regCounter = i; // 更新寄存器计数
+            // 更新 builder 的寄存器计数，避免和参数名冲突
+            builder.regCounter = argIndex; 
         }
 
         // 处理函数体
         if (ctx->block()) {
-            // block 会再次 enterScope，这里已经是函数 scope 了
-            // 为了避免多余 scope，可以直接手动遍历 blockItems，或者在 visitBlock 里调整
-            // 这里最简单的方法是直接 visit(block)，虽然会多一层 scope 但不影响逻辑
             for (auto item : ctx->block()->blockItem()) visit(item);
         }
 
@@ -768,15 +751,14 @@ public:
         return nullptr;
     }
 
-    antlrcpp::Any visitVarDecl(SysYParser::VarDeclContext *ctx) override{
-        // [关键修改 1] 获取当前声明的基础类型 (int 或 float)
+    antlrcpp::Any visitVarDecl(SysYParser::VarDeclContext *ctx) override {
+        // [关键修改] 获取当前声明的基础类型 (int 或 float)
         Type *declType = Type::getInt32Ty(); // 默认为 int
         if (ctx->bType()->FLOAT())
         {
             declType = Type::getFloatTy();
         }
 
-        // 更新类成员 currentDeclType，供 flattenVarInitVal 等辅助函数使用
         currentDeclType = declType;
 
         for (auto def : ctx->varDef())
@@ -793,19 +775,18 @@ public:
                     // 局部指针
                     ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, name); // i32**
                     
-                    // 符号表记录: 类型 i32*, value是 i32**, isPointer=true
-                    symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, false, {}, true);
+                    // [修复] 补全 addSymbol 参数，加入 0.0f
+                    // 参数顺序: name, type, val, isConst, intVal, floatVal, isArray, dims, isPointer
+                    symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, 0.0f, false, {}, true);
 
                     if (def->ASSIGN() && def->initVal()) {
                         // int *p = &a;
                         ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
                         if (initVal) {
-                            // 如果类型不匹配(比如把 int 赋给 int*)，这里可以加个简单的 bitcast 或者忽略
                             builder.CreateStore(initVal, allocaPtr);
                         }
                     }
                 } else {
-                    // 全局指针暂略，或者作为扩展实现
                     std::cerr << "Global pointer not supported in this simplified demo.\n";
                 }
                 continue; // 处理完指针，跳过后续标量/数组逻辑
@@ -818,7 +799,7 @@ public:
                 int totalSize = 1;
                 for (auto d : def->constExp())
                 {
-                    int sz = evalConstExp(d->exp()); // 数组维度必须是整数
+                    int sz = evalConstExp(d->exp());
                     dims.push_back(sz);
                     totalSize *= sz;
                 }
@@ -829,29 +810,22 @@ public:
                 {
                     // [局部数组]
                     ValuePtr ptr = createEntryBlockAlloca(arrType);
-                    // 注册符号表 (注意传入 declType 和 dims)
+                    // 注册符号表
                     symbolTable.addSymbol(name, declType, ptr, false, 0, 0.0f, true, dims);
 
                     if (def->ASSIGN() && def->initVal())
                     {
-                        // 局部数组初始化：获取所有初始值
                         std::vector<ValuePtr> initVals(totalSize);
-
-                        // 填充默认值 (0 或 0.0)
                         ValuePtr zeroVal = declType->isFloatTy() ? 
                                            (ValuePtr)ConstantFloat::get(0.0f) : 
                                            (ValuePtr)ConstantInt::get(0);
                         std::fill(initVals.begin(), initVals.end(), zeroVal);
 
                         int idx = 0;
-                        // 复用类成员函数 flattenVarInitVal (它会利用 currentDeclType 进行隐式转换)
                         flattenVarInitVal(initVals, idx, def->initVal(), dims, 0);
 
-                        // 生成 Store 指令初始化栈内存
                         for (int i = 0; i < totalSize; ++i)
                         {
-                            // 优化：如果初始值就是默认的 0，且之后没有再次赋值，其实可以跳过 Store
-                            // 但为了正确性，这里全量生成
                             ValuePtr idxVal = ConstantInt::get(i);
                             ValuePtr elemPtr = builder.CreateGEP(ptr, idxVal, totalSize);
                             builder.CreateStore(initVals[i], elemPtr);
@@ -860,16 +834,13 @@ public:
                 }
                 else
                 {
-                    // [全局数组]：必须是常量初始化
-                    // 我们使用字符串列表来存储初始化的 IR 文本 (e.g. "i32 5" 或 "float 0x...")
+                    // [全局数组]
                     std::vector<std::string> initStrs; 
                     bool hasInit = (def->ASSIGN() && def->initVal());
 
                     if (hasInit)
                     {
                         int idx = 0;
-
-                        // [关键修改 2] 升级 lambda 以支持 float/int
                         std::function<void(SysYParser::InitValContext *, int &, int)> globalHelper;
 
                         globalHelper = [&](SysYParser::InitValContext *v, int &currentIdx, int dimLevel)
@@ -878,7 +849,6 @@ public:
                             {
                                 if (currentIdx < totalSize)
                                 {
-                                    // 根据类型求值并生成 IR 字符串
                                     if (declType->isFloatTy()) {
                                         float val = evalFloatConstExp(v->exp());
                                         initStrs.push_back("float " + ConstantFloat::get(val)->to_string());
@@ -897,7 +867,6 @@ public:
                                     globalHelper(child, currentIdx, dimLevel + 1);
                                 }
                                 int blockSize = getDimSize(dims, dimLevel);
-                                // 补零
                                 while (currentIdx < startPos + blockSize && currentIdx < totalSize)
                                 {
                                     if (declType->isFloatTy()) initStrs.push_back("float " + ConstantFloat::get(0.0f)->to_string());
@@ -909,7 +878,6 @@ public:
 
                         globalHelper(def->initVal(), idx, 0);
 
-                        // 如果初始化列表比数组短，补齐剩余的零
                         while(initStrs.size() < totalSize) {
                             if (declType->isFloatTy()) initStrs.push_back("float " + ConstantFloat::get(0.0f)->to_string());
                             else initStrs.push_back("i32 0");
@@ -937,7 +905,6 @@ public:
                     module->globalLines.push_back(ss.str());
 
                     ValuePtr ptr = new Value(Type::getPointerTy(arrType), "@" + name);
-                    // 注册全局数组符号
                     symbolTable.addSymbol(name, declType, ptr, false, 0, 0.0f, true, dims);
                 }
                 continue;
@@ -950,7 +917,6 @@ public:
                 if (def->ASSIGN() && def->initVal() && def->initVal()->exp())
                 {
                     ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
-                    // [关键修改 3] 隐式类型转换 (int <-> float)
                     initVal = ensureType(initVal, declType);
                     if (initVal)
                         builder.CreateStore(initVal, ptr);
@@ -959,11 +925,9 @@ public:
             }
             else
             {
-                // 全局标量
                 std::string initStr;
                 if (def->ASSIGN() && def->initVal() && def->initVal()->exp())
                 {
-                    // 全局变量初始值求值
                     if (declType->isFloatTy()) {
                         float val = evalFloatConstExp(def->initVal()->exp());
                         initStr = ConstantFloat::get(val)->to_string();
@@ -980,7 +944,6 @@ public:
                 std::string ir = "@" + name + " = dso_local global " + declType->toString() + " " + initStr + ", align 4";
                 module->globalLines.push_back(ir);
                 
-                // --- 修复：全局变量是 i32* 类型 ---
                 ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);                
                 symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0);
             }
@@ -1600,7 +1563,7 @@ public:
 
         // 恢复之前的循环上下文
         condBlockStack.pop();
-        mergeBlockStack.push(prevMergeBB);
+        mergeBlockStack.pop();
 
         return nullptr;
     }

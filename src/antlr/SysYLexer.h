@@ -17,8 +17,8 @@ public:
     IntConst = 14, L_PAREN = 15, R_PAREN = 16, L_BRACK = 17, R_BRACK = 18, 
     L_BRACE = 19, R_BRACE = 20, COMMA = 21, SEMICOLON = 22, PLUS = 23, MINUS = 24, 
     MUL = 25, DIV = 26, MOD = 27, ASSIGN = 28, EQ = 29, NEQ = 30, LT = 31, 
-    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, WS = 38, LINE_COMMENT = 39, 
-    BLOCK_COMMENT = 40
+    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, BITAND = 38, 
+    WS = 39, LINE_COMMENT = 40, BLOCK_COMMENT = 41
   };
 
   explicit SysYLexer(antlr4::CharStream *input);

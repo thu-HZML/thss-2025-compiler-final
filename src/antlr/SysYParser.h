@@ -17,8 +17,8 @@ public:
     IntConst = 14, L_PAREN = 15, R_PAREN = 16, L_BRACK = 17, R_BRACK = 18, 
     L_BRACE = 19, R_BRACE = 20, COMMA = 21, SEMICOLON = 22, PLUS = 23, MINUS = 24, 
     MUL = 25, DIV = 26, MOD = 27, ASSIGN = 28, EQ = 29, NEQ = 30, LT = 31, 
-    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, WS = 38, LINE_COMMENT = 39, 
-    BLOCK_COMMENT = 40
+    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, BITAND = 38, 
+    WS = 39, LINE_COMMENT = 40, BLOCK_COMMENT = 41
   };
 
   enum {
@@ -26,7 +26,8 @@ public:
     RuleConstInitVal = 5, RuleVarDecl = 6, RuleVarDef = 7, RuleInitVal = 8, 
     RuleFuncDef = 9, RuleFuncType = 10, RuleFuncFParams = 11, RuleFuncFParam = 12, 
     RuleBlock = 13, RuleBlockItem = 14, RuleStmt = 15, RuleExp = 16, RuleCond = 17, 
-    RuleLVal = 18, RuleNumber = 19, RuleFuncRParams = 20, RuleConstExp = 21
+    RuleLVal = 18, RuleNumber = 19, RuleFuncRParams = 20, RuleConstExp = 21, 
+    RulePointerPrefix = 22
   };
 
   explicit SysYParser(antlr4::TokenStream *input);
@@ -67,7 +68,8 @@ public:
   class LValContext;
   class NumberContext;
   class FuncRParamsContext;
-  class ConstExpContext; 
+  class ConstExpContext;
+  class PointerPrefixContext; 
 
   class  CompUnitContext : public antlr4::ParserRuleContext {
   public:
@@ -196,6 +198,7 @@ public:
     VarDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *IDENT();
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<ConstExpContext *> constExp();
@@ -286,6 +289,7 @@ public:
     virtual size_t getRuleIndex() const override;
     BTypeContext *bType();
     antlr4::tree::TerminalNode *IDENT();
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<antlr4::tree::TerminalNode *> R_BRACK();
@@ -535,6 +539,8 @@ public:
     antlr4::tree::TerminalNode *PLUS();
     antlr4::tree::TerminalNode *MINUS();
     antlr4::tree::TerminalNode *NOT();
+    antlr4::tree::TerminalNode *MUL();
+    antlr4::tree::TerminalNode *BITAND();
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
   };
@@ -620,6 +626,7 @@ public:
     LValContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *IDENT();
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<ExpContext *> exp();
@@ -676,6 +683,19 @@ public:
   };
 
   ConstExpContext* constExp();
+
+  class  PointerPrefixContext : public antlr4::ParserRuleContext {
+  public:
+    PointerPrefixContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *MUL();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  PointerPrefixContext* pointerPrefix();
 
 
   bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;

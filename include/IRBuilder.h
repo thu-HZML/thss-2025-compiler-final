@@ -48,14 +48,6 @@ public:
         return res;
     }
 
-    // 2. Store
-    void CreateStore(ValuePtr val, ValuePtr ptr) {
-    // 动态获取值的类型
-    std::string typeStr = val->getType()->toString();
-    std::string args = typeStr + " " + val->to_string() + ", " + 
-                       ptr->getType()->toString() + " " + ptr->to_string() + ", align 4";
-    currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
-    }
 
     // 浮点运算辅助方法
     ValuePtr CreateFAdd(ValuePtr lhs, ValuePtr rhs) {
@@ -109,25 +101,6 @@ public:
         return res;
     }
 
-    // 3. Load - 增强版本
-    ValuePtr CreateLoad(ValuePtr ptr) {
-        std::string name = nextName();
-        // 获取指针指向的元素类型
-        Type* pointerType = ptr->getType();
-        Type* elementType = Type::getInt32Ty(); // 默认回退
-        
-        if (pointerType->isPointerTy()) {
-            elementType = pointerType->elementType;
-        } else {
-            // 如果传入的不是指针，这是一个错误，但在容错设计中我们假设它是 i32*
-            // 实际上这里的 pointerType 可能是 [N x i32]*，我们需要 decay
-        }
-
-        std::string typeStr = elementType->toString();
-        // 关键修复：不要写死 i32
-        std::string args = typeStr + ", " + pointerType->toString() + " " + ptr->to_string() + ", align 4";
-
-        auto inst = std::make_unique<Instruction>(elementType, name, "load", args);
     // 2. Store - 通用增强版 (自动识别 i32 或 i32*)
     void CreateStore(ValuePtr val, ValuePtr ptr)
     {

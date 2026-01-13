@@ -99,6 +99,8 @@ public:
 
     virtual std::any visitConstExp(SysYParser::ConstExpContext *context) = 0;
 
+    virtual std::any visitPointerPrefix(SysYParser::PointerPrefixContext *context) = 0;
+
 
 };
 
