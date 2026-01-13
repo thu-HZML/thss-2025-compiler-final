@@ -58,6 +58,8 @@ private:
     // 用于记录 SysY 库中 void 函数的名称
     std::set<std::string> voidFuncs;
 
+    std::map<std::string, Type*> funcRetTypes;
+
     // 循环上下文栈，用于break/continue语句
     std::stack<BasicBlock *> condBlockStack;  // 循环条件块栈
     std::stack<BasicBlock *> mergeBlockStack; // 循环合并块栈
@@ -431,6 +433,23 @@ public:
         voidFuncs.insert("putint"); voidFuncs.insert("putch"); voidFuncs.insert("putfloat");
         voidFuncs.insert("putarray"); voidFuncs.insert("putfarray");
         voidFuncs.insert("starttime"); voidFuncs.insert("stoptime");
+
+        funcRetTypes["putint"] = Type::getVoidTy();
+        funcRetTypes["putch"] = Type::getVoidTy();
+        funcRetTypes["putfloat"] = Type::getVoidTy(); // 注意这里是 void
+        funcRetTypes["putarray"] = Type::getVoidTy();
+        funcRetTypes["putfarray"] = Type::getVoidTy();
+        funcRetTypes["starttime"] = Type::getVoidTy();
+        funcRetTypes["stoptime"] = Type::getVoidTy();
+        
+        // 2. Int 类型
+        funcRetTypes["getint"] = Type::getInt32Ty();
+        funcRetTypes["getch"] = Type::getInt32Ty();
+        funcRetTypes["getarray"] = Type::getInt32Ty();
+        funcRetTypes["getfarray"] = Type::getInt32Ty();
+
+        // 3. Float 类型
+        funcRetTypes["getfloat"] = Type::getFloatTy();
     }
 
     std::string getIR() const { return module->print(); }
@@ -461,6 +480,7 @@ public:
         } else {
             returnType = Type::getInt32Ty();
         }
+        funcRetTypes[name] = returnType;
 
         currentFunction = new Function(returnType, name);
         module->addFunction(std::unique_ptr<Function>(currentFunction));
@@ -846,6 +866,10 @@ public:
         {
             // 有返回值的 return
             ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
+            if (currentFunction && val) {
+                val = ensureType(val, currentFunction->returnType);
+            }
+            
             if (val)
                 builder.CreateRet(val);
         }
@@ -1132,9 +1156,19 @@ public:
         // 然后在这里查表并循环调用 ensureType。目前的硬编码仅适用于标准库。
         // --- 修复结束 ---
 
+        Type* retType = Type::getInt32Ty(); // 默认 i32
+        if (funcRetTypes.find(funcName) != funcRetTypes.end()) {
+            retType = funcRetTypes[funcName];
+        } else {
+            // 如果未找到（比如递归调用时未前向声明？SysY通常按顺序定义），
+            // 或者假设是外部 int 函数。
+            // 对于递归，visitFuncDef 开头已经注册了，所以通常能找到。
+            std::cerr << "Warning: Calling undefined function " << funcName << ", assuming i32 return." << std::endl;
+        }
+
         // 判断是否为 SysY 库中的 void 函数
         bool isVoid = (voidFuncs.find(funcName) != voidFuncs.end());
-        return builder.CreateCall(funcName, args, isVoid);
+        return builder.CreateCall(funcName, args, retType);
     }
     // 修复逻辑与表达式（&&）
     antlrcpp::Any visitLandExp(SysYParser::LandExpContext *ctx) override

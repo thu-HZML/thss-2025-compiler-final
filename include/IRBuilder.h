@@ -141,8 +141,12 @@ public:
     // 4. Ret
     void CreateRet(ValuePtr val)
     {
-        std::string args = "i32 " + val->to_string();
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", args));
+        std::string name = ""; // ret 指令没有返回值变量名
+        // [修复] 使用 val->getType()->toString() 动态获取类型 (如 "float" 或 "i32")
+        std::string args = val->getType()->toString() + " " + val->to_string();
+        
+        auto inst = std::make_unique<Instruction>(Type::getVoidTy(), name, "ret", args);
+        currentBlock->addInstruction(std::move(inst));
     }
 
     // 支持 void 返回
@@ -220,34 +224,24 @@ public:
     }
 
     // 9. Call 支持不同数量的参数
-    ValuePtr CreateCall(const std::string &funcName, const std::vector<ValuePtr> &args, bool isVoid = false)
+    ValuePtr CreateCall(std::string funcName, std::vector<ValuePtr> args, Type* retType)
     {
-        std::string argsStr = "";
-        for (size_t i = 0; i < args.size(); ++i)
-        {
-            if (i > 0)
-                argsStr += ", ";
-            argsStr += args[i]->getType()->toString() + " " + args[i]->to_string();
+        // 如果是 void，名字为空；否则生成临时变量名
+        std::string name = retType->isVoidTy() ? "" : nextName();
+        
+        std::string argStr = "";
+        for (size_t i = 0; i < args.size(); ++i) {
+            argStr += args[i]->getType()->toString() + " " + args[i]->to_string();
+            if (i < args.size() - 1) argStr += ", ";
         }
 
-        if (isVoid)
-        {
-            // Void 函数：不分配寄存器名字，指令类型为 void
-            auto inst = std::make_unique<Instruction>(Type::getVoidTy(), "", "call",
-                                                      "void @" + funcName + "(" + argsStr + ")");
-            currentBlock->addInstruction(std::move(inst));
-            return nullptr; // 或者返回一个空 Value
-        }
-        else
-        {
-            // 非 Void 函数：分配寄存器，类型为 i32
-            std::string name = nextName();
-            auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call",
-                                                      "i32 @" + funcName + "(" + argsStr + ")");
-            ValuePtr res = inst.get();
-            currentBlock->addInstruction(std::move(inst));
-            return res;
-        }
+        // 构造指令: call float @func(i32 %0, ...)
+        std::string instArgs = retType->toString() + " @" + funcName + "(" + argStr + ")";
+
+        auto inst = std::make_unique<Instruction>(retType, name, "call", instArgs);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
     }
 
     // 10. 条件跳转 - 新增
