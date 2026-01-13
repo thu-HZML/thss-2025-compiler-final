@@ -44,29 +44,53 @@ public:
     }
 
     // 2. Store
+    // 2. Store - 通用增强版 (自动识别 i32 或 i32*)
     void CreateStore(ValuePtr val, ValuePtr ptr)
     {
-        std::string args = "i32 " + val->to_string() + ", i32* " + ptr->to_string() + ", align 4";
+        std::string valTypeStr = val->getType()->toString(); // "i32" 或 "i32*"
+        std::string ptrTypeStr = ptr->getType()->toString(); // "i32*" 或 "i32**"
+        
+        // 指针通常用 8字节对齐，整数用 4字节
+        std::string align = val->getType()->isPointerTy() ? ", align 8" : ", align 4";
+
+        std::string args = valTypeStr + " " + val->to_string() + ", " + 
+                           ptrTypeStr + " " + ptr->to_string() + align;
+                           
         currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
     }
 
+    // 保留重载版本用于存立即数
     void CreateStore(int val, ValuePtr ptr)
     {
-        std::string args = "i32 " + std::to_string(val) + ", i32* " + ptr->to_string() + ", align 4";
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
+        CreateStore(new ConstantInt(val), ptr);
     }
 
     // 3. Load - 增强版本
+    // 3. Load - 通用增强版
     ValuePtr CreateLoad(ValuePtr ptr)
     {
         std::string name = nextName();
-        std::string args = "i32, i32* " + ptr->to_string() + ", align 4";
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "load", args);
+        Type* ptrType = ptr->getType();
+        Type* valType;
+
+        // 推导加载出的值的类型：如果是 i32*，则加载出 i32；如果是 i32**，则加载出 i32*
+        if (ptrType->isPointerTy()) {
+            valType = static_cast<Type*>(ptrType)->elementType;
+        } else {
+            // 默认回退情况
+            valType = Type::getInt32Ty();
+        }
+
+        std::string align = valType->isPointerTy() ? ", align 8" : ", align 4";
+
+        std::string args = valType->toString() + ", " + 
+                           ptrType->toString() + " " + ptr->to_string() + align;
+                           
+        auto inst = std::make_unique<Instruction>(valType, name, "load", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
-
     // 4. Ret
     void CreateRet(ValuePtr val)
     {

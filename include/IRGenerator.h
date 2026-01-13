@@ -200,50 +200,65 @@ private:
 
         ValuePtr base = info->value;
 
+        // 1. 检查修饰符
+        bool isDereference = (ctx->pointerPrefix() != nullptr); // 检查 *p
+        bool hasBrackets = !ctx->L_BRACK().empty();             // 检查 p[i]
+
+        // 2. 处理指针变量 (int *p)
         if (info->isPointer)
         {
-            base = builder.CreatePointerLoad(base);
+            // 关键逻辑：
+            // 如果既没有 * 也没有 [] (例如: p = &b)，说明我们要操作 p 变量本身(i32**)
+            // 此时直接返回 base (i32**)
+            if (!isDereference && !hasBrackets) {
+                return base;
+            }
+            
+            // 否则 (例如: *p 或 p[i])，我们需要 p 指向的地址
+            // 先从栈上 Load 出 p 的值 (i32*)
+            base = builder.CreateLoad(base); 
         }
 
-        if (!info->isArray || ctx->L_BRACK().empty())
+        // 3. 处理显式解引用 (*p)
+        if (isDereference)
+        {
+            // base 已经是 i32*，直接返回作为地址
             return base;
+        }
 
+        // 4. 处理数组下标 (a[i] 或 p[i])
+        if (!info->isArray || ctx->L_BRACK().empty())
+            return base; // 如果是指针且无下标，直接返回
+
+        // ... (保留原本的数组下标计算逻辑) ...
         ValuePtr offset = nullptr;
         size_t n = ctx->exp().size();
 
         for (size_t i = 0; i < n; ++i)
         {
             ValuePtr idx = std::any_cast<ValuePtr>(visit(ctx->exp(i)));
-
             int stride = 1;
             for (size_t k = i + 1; k < info->dims.size(); ++k)
                 stride *= info->dims[k];
-
+            
             ValuePtr term = idx;
-            if (stride > 1)
-            {
+            if (stride > 1) {
                 ValuePtr strideVal = new ConstantInt(stride);
                 term = builder.CreateBinary("mul", idx, strideVal);
             }
-
-            if (!offset)
-                offset = term;
-            else
-                offset = builder.CreateBinary("add", offset, term);
+            if (!offset) offset = term;
+            else offset = builder.CreateBinary("add", offset, term);
         }
+        if (!offset) offset = new ConstantInt(0);
 
-        if (!offset)
-            offset = new ConstantInt(0);
-
-        if (info->isPointer)
-        {
+        // 生成 GEP
+        if (info->isPointer) {
+             // 此时 base 是 i32*
             return builder.CreatePointerGEP(base, offset);
-        }
-        else
-        {
+        } else {
+             // 此时 base 是 [N x i32]*
             int totalSize = 1;
-            for (int d : info->dims)
-                totalSize *= d;
+            for (int d : info->dims) totalSize *= d;
             return builder.CreateGEP(base, offset, totalSize);
         }
     }
@@ -377,6 +392,24 @@ public:
 
     antlrcpp::Any visitCompUnit(SysYParser::CompUnitContext *ctx) override
     {
+        // --- 新增：预扫描 Pass 1 ---
+        // 先遍历所有函数定义，识别出哪些是 void 函数
+        // 这样即使函数定义在后面，调用时也能正确生成 call void 指令
+        for (auto child : ctx->children)
+        {
+            if (auto func = dynamic_cast<SysYParser::FuncDefContext *>(child))
+            {
+                std::string name = getTokenText(func->IDENT());
+                std::string typeStr = func->funcType()->getText();
+                if (typeStr == "void")
+                {
+                    voidFuncs.insert(name);
+                }
+            }
+        }
+
+        // --- 原有逻辑：Pass 2 ---
+        // 真正生成代码
         for (auto child : ctx->children)
         {
             if (auto func = dynamic_cast<SysYParser::FuncDefContext *>(child))
@@ -386,7 +419,6 @@ public:
         }
         return nullptr;
     }
-
     antlrcpp::Any visitFuncDef(SysYParser::FuncDefContext *ctx) override
     {
         std::string name = getTokenText(ctx->IDENT());
@@ -420,7 +452,7 @@ public:
             paramCount = ctx->funcFParams()->funcFParam().size();
         }
 
-        // 2. 关键：将寄存器计数器跳过参数占用的编号 (例如有1个参数，它占用%0，下条指令应从%1开始)
+        // 2. 将寄存器计数器跳过参数占用的编号
         builder.regCounter = paramCount;
 
         // 3. 处理参数
@@ -432,12 +464,16 @@ public:
                 std::string paramName = getTokenText(param->IDENT());
                 std::string argReg = "%" + std::to_string(i);
 
-                // Check for array dimensions
-                bool isArray = false;
+                
+                // 检查是否是指针定义 (int *p)
+                bool isPtrDecl = (param->pointerPrefix() != nullptr);
+                
+                // 检查是否是数组定义 (int a[])
+                bool isArrayDecl = !param->L_BRACK().empty();
+                
                 std::vector<int> dims;
-                if (!param->L_BRACK().empty())
+                if (isArrayDecl)
                 {
-                    isArray = true;
                     dims.push_back(0); // Unknown first dimension
                     for (auto expr : param->exp())
                     {
@@ -447,30 +483,44 @@ public:
 
                 currentFunction->args.push_back(argReg);
 
-                if (isArray)
+                if (isPtrDecl || isArrayDecl)
                 {
-                    currentFunction->argTypes.push_back(Type::getPointerTy(Type::getInt32Ty()));
-                    // Array/Pointer parameter
-                    ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
-                    ValuePtr allocaPtr = builder.CreateAlloca("i32*");
+                    // 参数是 i32* 类型
+                    Type* ptrType = Type::getPointerTy(Type::getInt32Ty());
+                    currentFunction->argTypes.push_back(ptrType);
+                    
+                    ValuePtr argVal = new Value(ptrType, argReg);
+                    
+                    // --- 修复点 1: 使用 createEntryBlockAlloca ---
+                    // 以前是: builder.CreateAlloca("i32*"); (类型错误)
+                    // 现在改为:
+                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, paramName + "_addr");
+                    
                     builder.CreatePointerStore(argVal, allocaPtr);
-                    symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0, true, dims, true);
+                    symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0, isArrayDecl, dims, true);
                 }
                 else
                 {
+                    // 参数是 i32 类型
                     currentFunction->argTypes.push_back(Type::getInt32Ty());
-                    // Scalar parameter
+                    
                     ValuePtr argVal = new Value(Type::getInt32Ty(), argReg);
-                    ValuePtr allocaPtr = builder.CreateAlloca("i32");
+                    
+                    // --- 修复点 2: 使用 createEntryBlockAlloca ---
+                    // 以前是: builder.CreateAlloca("i32");
+                    // 现在改为:
+                    ValuePtr allocaPtr = createEntryBlockAlloca(Type::getInt32Ty(), paramName + "_addr");
+                    
                     builder.CreateStore(argVal, allocaPtr);
                     symbolTable.addSymbol(paramName, Type::getInt32Ty(), allocaPtr, false, 0);
                 }
+                // --- 修改结束 ---
+                
                 i++;
             }
         }
 
-        // 修改：不调用 visit(ctx->block()) 以避免创建双重作用域
-        // 而是直接遍历 block 中的 item，使参数和函数体在同一作用域
+        // 修改：直接遍历 blockItem，避免创建双重作用域
         if (ctx->block())
         {
             for (auto item : ctx->block()->blockItem())
@@ -616,6 +666,34 @@ public:
         for (auto def : ctx->varDef())
         {
             std::string name = getTokenText(def->IDENT());
+            bool isPointer = (def->pointerPrefix() != nullptr); // 检查是否有 *
+
+            if (isPointer) {
+                // 指针变量 int *p
+                // IR: %p = alloca i32*
+                Type* ptrType = Type::getPointerTy(Type::getInt32Ty());
+                
+                if (currentFunction) {
+                    // 局部指针
+                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, name); // i32**
+                    
+                    // 符号表记录: 类型 i32*, value是 i32**, isPointer=true
+                    symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, false, {}, true);
+
+                    if (def->ASSIGN() && def->initVal()) {
+                        // int *p = &a;
+                        ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
+                        if (initVal) {
+                            // 如果类型不匹配(比如把 int 赋给 int*)，这里可以加个简单的 bitcast 或者忽略
+                            builder.CreateStore(initVal, allocaPtr);
+                        }
+                    }
+                } else {
+                    // 全局指针暂略，或者作为扩展实现
+                    std::cerr << "Global pointer not supported in this simplified demo.\n";
+                }
+                continue; // 处理完指针，跳过后续标量/数组逻辑
+            }
 
             // 数组处理
             if (!def->L_BRACK().empty())
@@ -867,6 +945,23 @@ public:
 
     antlrcpp::Any visitUnaryExp(SysYParser::UnaryExpContext *ctx) override
     {
+        // 1. 处理取地址 & (Address-Of)
+        // 必须优先处理，因为我们需要的是地址而不是值
+        if (ctx->BITAND())
+        {
+            // 语法检查：& 后面必须是左值 (例如 &a, &arr[0])
+            // 虽然 parser 允许 &exp，但在语义上只能是 &lVal
+            if (auto lValExp = dynamic_cast<SysYParser::LValExpContext*>(ctx->exp()))
+            {
+                // 获取左值的地址，不进行 load
+                return getLValPointer(lValExp->lVal());
+            }
+            else
+            {
+                std::cerr << "Error: operand of '&' must be an l-value" << std::endl;
+                return (ValuePtr)nullptr;
+            }
+        }
         if (ctx->PLUS())
             return visit(ctx->exp());
         ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));

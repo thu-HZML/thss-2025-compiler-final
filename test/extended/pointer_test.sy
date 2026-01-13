@@ -1,0 +1,50 @@
+int main() {
+    int a = 10;
+    int b = 20;
+    
+    int *p = &a;
+    
+    // Test 1
+    if (*p != 10) {
+        putch(69); putch(49); putch(10); // E1
+        return 1;
+    }
+    
+    *p = 100;
+    if (a != 100) {
+        putch(69); putch(50); putch(10); // E2
+        return 2;
+    }
+    
+    // Test 2: Pointer Reassignment
+    p = &b;
+    *p = 200;
+    
+    // 如果 p = &b 失败（p仍指向a），这里 a 会变成 200，b 还是 20
+    if (b != 200) {
+        putch(69); putch(51); putch(10); // E3: b is wrong
+        return 3;
+    }
+    if (a != 100) {
+        putch(69); putch(52); putch(10); // E4: a was modified!
+        return 4;
+    }
+
+    // Test 3: Swap
+    swap(&a, &b);
+    if (a != 200) { putch(69); putch(53); return 5; }
+    if (b != 100) { putch(69); putch(54); return 6; }
+
+    // Success
+    putint(10); putch(10);
+    putint(100); putch(10);
+    putint(200); putch(10);
+    putint(200); putch(32); putint(100); putch(10);
+    return 0;
+}
+
+void swap(int *x, int *y) {
+    int temp = *x;
+    *x = *y;
+    *y = temp;
+}

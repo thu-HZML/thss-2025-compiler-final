@@ -48,7 +48,7 @@ GE: '>=';
 AND: '&&';
 OR: '||';
 NOT: '!';
-
+BITAND: '&'; 
 // Whitespace
 WS: [ \t\r\n]+ -> skip;
 LINE_COMMENT: '//' .*? '\n' -> skip;
