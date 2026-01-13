@@ -866,7 +866,19 @@ public:
 
     antlrcpp::Any visitNumberExp(SysYParser::NumberExpContext *ctx) override
     {
-        std::string text = getTokenText(ctx->number()->IntConst());
+        // [修复] 获取完整文本，无论是 IntConst 还是 FloatConst
+        std::string text = ctx->number()->getText();
+        
+        // 判断是否为浮点数（包含小数点或指数 e/E）
+        if (text.find('.') != std::string::npos || 
+            text.find('e') != std::string::npos || 
+            text.find('E') != std::string::npos) 
+        {
+            float val = parseFloat(text);
+            return (ValuePtr) ConstantFloat::get(val);
+        }
+        
+        // 否则当作整数处理
         int val = parseInteger(text);
         return (ValuePtr) new ConstantInt(val);
     }
@@ -977,26 +989,47 @@ public:
     {
         if (ctx->PLUS())
             return visit(ctx->exp());
+            
         ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
-        if (!val)
-            return (ValuePtr) nullptr;
+        if (!val) return (ValuePtr) nullptr;
 
-        if (auto c = dynamic_cast<ConstantInt *>(val))
-        {
-            if (ctx->MINUS())
-                return (ValuePtr) new ConstantInt(-c->value);
-            if (ctx->NOT())
-                return (ValuePtr) new ConstantInt(!c->value);
+        // 1. 常量折叠优化 (增加 Float 支持)
+        if (auto cInt = dynamic_cast<ConstantInt *>(val)) {
+             if (ctx->MINUS()) return (ValuePtr) new ConstantInt(-cInt->value);
+             if (ctx->NOT()) return (ValuePtr) new ConstantInt(!cInt->value);
         }
+        if (auto cFloat = dynamic_cast<ConstantFloat *>(val)) {
+             if (ctx->MINUS()) return (ValuePtr) ConstantFloat::get(-cFloat->value);
+             // !float 通常语义为 val == 0.0
+             if (ctx->NOT()) return (ValuePtr) new ConstantInt(cFloat->value == 0.0f); 
+        }
+
+        // 2. 指令生成
         if (ctx->MINUS())
         {
-            ValuePtr zero = new ConstantInt(0);
-            return builder.CreateBinary("sub", zero, val);
+            // [修复] 根据类型生成 fsub 或 sub
+            if (val->getType()->isFloatTy()) {
+                ValuePtr zero = ConstantFloat::get(0.0f);
+                return builder.CreateBinary("fsub", zero, val);
+            } else {
+                ValuePtr zero = new ConstantInt(0);
+                return builder.CreateBinary("sub", zero, val);
+            }
         }
         if (ctx->NOT())
         {
-            ValuePtr zero = new ConstantInt(0);
-            ValuePtr cmp = builder.CreateICmp("eq", val, zero);
+            // [修复] 根据类型生成 fcmp 或 icmp
+            ValuePtr zero = val->getType()->isFloatTy() ? 
+                            (ValuePtr)ConstantFloat::get(0.0f) : 
+                            (ValuePtr)new ConstantInt(0);
+            
+            ValuePtr cmp;
+            if (val->getType()->isFloatTy()) {
+                // 浮点数判 0 使用 fcmp oeq (Ordered Equal)
+                cmp = builder.CreateFCmp("oeq", val, zero);
+            } else {
+                cmp = builder.CreateICmp("eq", val, zero);
+            }
             return builder.CreateZExt(cmp);
         }
         return val;
@@ -1038,9 +1071,31 @@ public:
     {
         ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
         ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
+        if (!lhs || !rhs) return (ValuePtr)nullptr;
 
-        std::string op = ctx->EQ() ? "eq" : "ne";
-        ValuePtr cmp = builder.CreateICmp(op, lhs, rhs);
+        // [修复] 检查是否涉及浮点数
+        bool isFloat = lhs->getType()->isFloatTy() || rhs->getType()->isFloatTy();
+        ValuePtr cmp;
+
+        if (isFloat) {
+            // 1. 类型统一转为 float
+            lhs = ensureType(lhs, Type::getFloatTy());
+            rhs = ensureType(rhs, Type::getFloatTy());
+
+            // 2. 选择浮点比较谓词
+            // == 使用 oeq (Ordered and Equal)
+            // != 使用 une (Unordered or Not Equal) - 这样处理 NaN 比较更符合直觉
+            std::string op = ctx->EQ() ? "oeq" : "une";
+            
+            // 3. 生成 fcmp 指令
+            cmp = builder.CreateFCmp(op, lhs, rhs);
+        } else {
+            // 整数情况保持不变
+            std::string op = ctx->EQ() ? "eq" : "ne";
+            cmp = builder.CreateICmp(op, lhs, rhs);
+        }
+
+        // fcmp/icmp 返回 i1，需要 zext 扩展为 i32 (0 或 1)
         return builder.CreateZExt(cmp);
     }
 

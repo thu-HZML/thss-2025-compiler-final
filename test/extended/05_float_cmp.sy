@@ -1,0 +1,19 @@
+int main() {
+    float a = 1.5;
+    float b = 1.5;
+    float c = 2.3;
+
+    if (a == b) putint(1); // True
+    else putint(0);
+    putch(32);
+
+    if (c > a) putint(1);  // True
+    else putint(0);
+    putch(32);
+
+    if (a >= c) putint(1); // False
+    else putint(0);
+    putch(10);
+
+    return 0;
+}

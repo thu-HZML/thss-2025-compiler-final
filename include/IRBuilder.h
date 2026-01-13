@@ -196,13 +196,24 @@ public:
     // 8. GEP (支持扁平化数组寻址)
     // 扁平化后，数组总是一维 [Size x i32]
     // 访问时使用 calculated_index
-    ValuePtr CreateGEP(ValuePtr ptr, ValuePtr idx, int totalSize)
+    ValuePtr CreateGEP(ValuePtr ptr, ValuePtr idx, int arraySize)
     {
         std::string name = nextName();
-        std::string type = "[" + std::to_string(totalSize) + " x i32]";
-        std::string args = "inbounds " + type + ", " + type + "* " + ptr->to_string() + ", i32 0, i32 " + idx->to_string();
+        
+        // 从 ptr 中获取实际的类型
+        // ptr 类型通常是 [N x float]* 或 [N x i32]*
+        Type* ptrType = ptr->getType(); 
+        Type* arrayType = ptrType->elementType; // 获取 [N x float]
+        Type* elementType = arrayType->elementType; // 获取 float 或 i32
 
-        auto inst = std::make_unique<Instruction>(Type::getPointerTy(Type::getInt32Ty()), name, "getelementptr", args);
+        std::string typeStr = arrayType->toString(); // e.g. "[3 x float]"
+        
+        // 构造指令: getelementptr inbounds [3 x float], [3 x float]* %ptr, i32 0, i32 %idx
+        std::string args = "inbounds " + typeStr + ", " + ptrType->toString() + " " + ptr->to_string() + 
+                           ", i32 0, i32 " + idx->to_string();
+
+        // 结果类型是指向元素的指针 (float* 或 i32*)
+        auto inst = std::make_unique<Instruction>(Type::getPointerTy(elementType), name, "getelementptr", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
@@ -416,10 +427,17 @@ public:
     ValuePtr CreatePointerGEP(ValuePtr ptr, ValuePtr idx)
     {
         std::string name = nextName();
-        // getelementptr i32, i32* %ptr, i32 %idx
-        std::string args = "i32, i32* " + ptr->to_string() + ", i32 " + idx->to_string();
+        
+        // ptr 类型是 float* 或 i32*
+        Type* ptrType = ptr->getType();
+        Type* elementType = ptrType->elementType; // float 或 i32
 
-        auto inst = std::make_unique<Instruction>(Type::getPointerTy(Type::getInt32Ty()), name, "getelementptr", args);
+        // 构造指令: getelementptr float, float* %ptr, i32 %idx
+        std::string args = elementType->toString() + ", " + ptrType->toString() + " " + ptr->to_string() + 
+                           ", i32 " + idx->to_string();
+
+        // 结果类型依然是指针 (float* 或 i32*)
+        auto inst = std::make_unique<Instruction>(ptrType, name, "getelementptr", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;

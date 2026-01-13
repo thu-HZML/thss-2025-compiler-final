@@ -1,0 +1,16 @@
+float ga[3] = {1.1, 2.2, 3.3}; // 全局数组
+
+int main() {
+    float la[3]; // 局部数组
+    la[0] = 10.5;
+    la[1] = 20.5;
+    
+    // 读取全局: 3.3
+    putfloat(ga[2]); 
+    putch(32);
+    
+    // 读取局部并计算: 31.0
+    putfloat(la[0] + la[1]);
+    putch(10);
+    return 0;
+}
