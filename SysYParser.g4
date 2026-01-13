@@ -10,7 +10,7 @@ decl: constDecl | varDecl;
 
 constDecl: CONST bType constDef (COMMA constDef)* SEMICOLON;
 
-bType: INT;
+bType: INT | FLOAT;
 
 constDef: IDENT (L_BRACK constExp R_BRACK)* ASSIGN constInitVal;
 
@@ -29,7 +29,7 @@ initVal: exp | L_BRACE (initVal (COMMA initVal)*)? R_BRACE;
 
 funcDef: funcType IDENT L_PAREN funcFParams? R_PAREN block;
 
-funcType: VOID | INT;
+funcType: VOID | INT | FLOAT;
 
 funcFParams: funcFParam (COMMA funcFParam)*;
 
@@ -73,7 +73,7 @@ cond: exp;
 
 lVal: pointerPrefix? IDENT (L_BRACK exp R_BRACK)*;
 
-number: IntConst;
+number: IntConst | FloatConst;
 
 funcRParams: exp (COMMA exp)*;
 

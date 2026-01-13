@@ -34,7 +34,7 @@ void putarray(int n,int a[]){
   printf("\n");
 }
 void putfloat(float a) {
-  printf("%a", a);
+  printf("%f", a);
 }
 void putfarray(int n, float a[]) {
     printf("%d:", n);

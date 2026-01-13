@@ -1,0 +1,16 @@
+int main() {
+    int a = 10;
+    float b = 2.5;
+    
+    // int(10) 被隐式转换为 float(10.0) -> 结果 12.5
+    float c = a + b; 
+    putfloat(c); 
+    putch(10);
+
+    // int(4) 被隐式转换为 float(4.0) -> 结果 10.0
+    float d = b * 4;
+    putfloat(d);
+    putch(10);
+
+    return 0;
+}
