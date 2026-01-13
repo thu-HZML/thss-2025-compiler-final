@@ -20,9 +20,10 @@ constInitVal:
 
 varDecl: bType varDef (COMMA varDef)* SEMICOLON;
 
+
 varDef:
-	IDENT (L_BRACK constExp R_BRACK)*
-	| IDENT (L_BRACK constExp R_BRACK)* ASSIGN initVal;
+    pointerPrefix? IDENT (L_BRACK constExp R_BRACK)* (ASSIGN initVal)?
+    ;
 
 initVal: exp | L_BRACE (initVal (COMMA initVal)*)? R_BRACE;
 
@@ -33,7 +34,7 @@ funcType: VOID | INT | FLOAT;
 funcFParams: funcFParam (COMMA funcFParam)*;
 
 funcFParam:
-	bType IDENT (L_BRACK R_BRACK (L_BRACK exp R_BRACK)*)?;
+	bType pointerPrefix? IDENT (L_BRACK R_BRACK (L_BRACK exp R_BRACK)*)?;
 
 block: L_BRACE blockItem* R_BRACE;
 
@@ -60,7 +61,7 @@ exp:
 	| L_PAREN exp R_PAREN					# parenExp
 	| number								# numberExp
 	| IDENT L_PAREN funcRParams? R_PAREN	# funcCallExp
-	| (PLUS | MINUS | NOT) exp				# unaryExp
+	| (PLUS | MINUS | NOT | MUL | BITAND) exp # unaryExp
 	| exp (MUL | DIV | MOD) exp				# mulDivModExp
 	| exp (PLUS | MINUS) exp				# addSubExp
 	| exp (LT | GT | LE | GE) exp			# relExp
@@ -70,10 +71,12 @@ exp:
 
 cond: exp;
 
-lVal: IDENT (L_BRACK exp R_BRACK)*;
+lVal: pointerPrefix? IDENT (L_BRACK exp R_BRACK)*;
 
 number: IntConst | FloatConst;
 
 funcRParams: exp (COMMA exp)*;
 
 constExp: exp;
+
+pointerPrefix: MUL;
