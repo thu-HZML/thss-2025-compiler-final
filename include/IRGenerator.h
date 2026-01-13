@@ -633,7 +633,7 @@ public:
                     ss << "], align 16";
                     module->globalLines.push_back(ss.str());
 
-                    ValuePtr ptr = new Value(Type::getInt32Ty(), "@" + name);
+                    ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, true, dims);
                 }
                 continue;
@@ -654,7 +654,9 @@ public:
             {
                 std::string ir = "@" + name + " = dso_local constant i32 " + std::to_string(val) + ", align 4";
                 module->globalLines.push_back(ir);
-                ValuePtr ptr = new Value(Type::getInt32Ty(), "@" + name);
+                ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);
+                
+                // 注册到符号表：类型是 i32 (SysY语义)，Value是 i32* (IR语义)
                 symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, val);
             }
         }
@@ -797,7 +799,7 @@ public:
                     ss << ", align 16";
                     module->globalLines.push_back(ss.str());
 
-                    ValuePtr ptr = new Value(Type::getInt32Ty(), "@" + name);
+                    ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);
                     symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0, true, dims);
                 }
                 continue;
@@ -824,7 +826,9 @@ public:
                 }
                 std::string ir = "@" + name + " = dso_local global i32 " + std::to_string(initVal) + ", align 4";
                 module->globalLines.push_back(ir);
-                ValuePtr ptr = new Value(Type::getInt32Ty(), "@" + name);
+                
+                // --- 修复：全局变量是 i32* 类型 ---
+                ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);                
                 symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0);
             }
         }
@@ -876,14 +880,25 @@ public:
         if (!ptr)
             return (ValuePtr) new ConstantInt(0);
 
+        // 数组名退化为指针 (Array Decay)
         if (info && info->isArray)
         {
             int indices = ctx->lVal()->L_BRACK().size();
             int dims = info->dims.size();
+            // 当提供的下标数量少于数组维度时（通常是作为参数传递数组名）
             if (indices < dims)
             {
-                // If ptr is [N x i32]*, decay it to i32*
-                // This only happens for global/local arrays when accessed without brackets
+                // 情况 1: 指针参数 (int arr[] 或 int *p)
+                // ptr 是 i32** (参数变量在栈上的地址)
+                // 我们需要传递的是它存的值 (i32*)
+                if (info->isPointer)
+                {
+                    return builder.CreateLoad(ptr);
+                }
+
+                // 情况 2: 普通数组 (int a[10])
+                // ptr 是 [10 x i32]* (数组首地址)
+                // 使用 GEP 获取 &a[0] (i32*)
                 if (!info->isPointer && ctx->lVal()->L_BRACK().empty())
                 {
                     int totalSize = 1;
@@ -891,14 +906,14 @@ public:
                         totalSize *= d;
                     return builder.CreateGEP(ptr, new ConstantInt(0), totalSize);
                 }
-                // Otherwise ptr is already i32* (either param or result of GEP)
+                
                 return ptr;
             }
         }
-
+        
+        // 普通变量或解引用：读取值
         return builder.CreateLoad(ptr);
     }
-
     antlrcpp::Any visitAddSubExp(SysYParser::AddSubExpContext *ctx) override
     {
         ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
