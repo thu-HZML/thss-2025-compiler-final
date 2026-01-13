@@ -20,7 +20,6 @@ int main() {
     p = &b;
     *p = 200;
     
-    // 如果 p = &b 失败（p仍指向a），这里 a 会变成 200，b 还是 20
     if (b != 200) {
         putch(69); putch(51); putch(10); // E3: b is wrong
         return 3;
