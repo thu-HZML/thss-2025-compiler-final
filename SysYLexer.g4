@@ -3,6 +3,7 @@ lexer grammar SysYLexer;
 // Keywords
 CONST: 'const';
 INT: 'int';
+FLOAT: 'float';
 VOID: 'void';
 IF: 'if';
 ELSE: 'else';
@@ -15,6 +16,10 @@ RETURN: 'return';
 
 // Identifiers
 IDENT: [a-zA-Z_] [a-zA-Z_0-9]*;
+
+FloatConst:
+    [0-9]* '.' [0-9]+ ([eE] [+-]? [0-9]+)?
+    | [0-9]+ [eE] [+-]? [0-9]+;
 
 // Constants (核心修复：添加十六进制和八进制支持)
 IntConst:
@@ -50,7 +55,7 @@ GE: '>=';
 AND: '&&';
 OR: '||';
 NOT: '!';
-
+BITAND: '&'; 
 // Whitespace
 WS: [ \t\r\n]+ -> skip;
 LINE_COMMENT: '//' .*? '\n' -> skip;

@@ -12,13 +12,13 @@
 class  SysYParser : public antlr4::Parser {
 public:
   enum {
-    CONST = 1, INT = 2, VOID = 3, IF = 4, ELSE = 5, WHILE = 6, FOR = 7, 
-    STRUCT = 8, BREAK = 9, CONTINUE = 10, RETURN = 11, IDENT = 12, IntConst = 13, 
-    L_PAREN = 14, R_PAREN = 15, L_BRACK = 16, R_BRACK = 17, L_BRACE = 18, 
-    R_BRACE = 19, DOT = 20, COMMA = 21, SEMICOLON = 22, PLUS = 23, MINUS = 24, 
-    MUL = 25, DIV = 26, MOD = 27, ASSIGN = 28, EQ = 29, NEQ = 30, LT = 31, 
-    GT = 32, LE = 33, GE = 34, AND = 35, OR = 36, NOT = 37, WS = 38, LINE_COMMENT = 39, 
-    BLOCK_COMMENT = 40
+    CONST = 1, INT = 2, FLOAT = 3, VOID = 4, IF = 5, ELSE = 6, WHILE = 7, 
+    FOR = 8, STRUCT = 9, BREAK = 10, CONTINUE = 11, RETURN = 12, IDENT = 13, 
+    FloatConst = 14, IntConst = 15, L_PAREN = 16, R_PAREN = 17, L_BRACK = 18, 
+    R_BRACK = 19, L_BRACE = 20, R_BRACE = 21, DOT = 22, COMMA = 23, SEMICOLON = 24, 
+    PLUS = 25, MINUS = 26, MUL = 27, DIV = 28, MOD = 29, ASSIGN = 30, EQ = 31, 
+    NEQ = 32, LT = 33, GT = 34, LE = 35, GE = 36, AND = 37, OR = 38, NOT = 39, 
+    BITAND = 40, WS = 41, LINE_COMMENT = 42, BLOCK_COMMENT = 43
   };
 
   enum {
@@ -27,7 +27,8 @@ public:
     RuleConstInitVal = 8, RuleVarDecl = 9, RuleVarDef = 10, RuleInitVal = 11, 
     RuleFuncDef = 12, RuleFuncType = 13, RuleFuncFParams = 14, RuleFuncFParam = 15, 
     RuleBlock = 16, RuleBlockItem = 17, RuleStmt = 18, RuleExp = 19, RuleCond = 20, 
-    RuleLVal = 21, RuleNumber = 22, RuleFuncRParams = 23, RuleConstExp = 24
+    RuleLVal = 21, RuleNumber = 22, RuleFuncRParams = 23, RuleConstExp = 24, 
+    RulePointerPrefix = 25
   };
 
   explicit SysYParser(antlr4::TokenStream *input);
@@ -71,7 +72,8 @@ public:
   class LValContext;
   class NumberContext;
   class FuncRParamsContext;
-  class ConstExpContext; 
+  class ConstExpContext;
+  class PointerPrefixContext; 
 
   class  CompUnitContext : public antlr4::ParserRuleContext {
   public:
@@ -184,6 +186,7 @@ public:
     BTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *INT();
+    antlr4::tree::TerminalNode *FLOAT();
     antlr4::tree::TerminalNode *STRUCT();
     antlr4::tree::TerminalNode *IDENT();
 
@@ -257,6 +260,7 @@ public:
     VarDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *IDENT();
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<ConstExpContext *> constExp();
@@ -316,6 +320,7 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *VOID();
     antlr4::tree::TerminalNode *INT();
+    antlr4::tree::TerminalNode *FLOAT();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -346,6 +351,7 @@ public:
     virtual size_t getRuleIndex() const override;
     BTypeContext *bType();
     antlr4::tree::TerminalNode *IDENT();
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<antlr4::tree::TerminalNode *> R_BRACK();
@@ -595,6 +601,8 @@ public:
     antlr4::tree::TerminalNode *PLUS();
     antlr4::tree::TerminalNode *MINUS();
     antlr4::tree::TerminalNode *NOT();
+    antlr4::tree::TerminalNode *MUL();
+    antlr4::tree::TerminalNode *BITAND();
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
   };
@@ -681,6 +689,7 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<antlr4::tree::TerminalNode *> IDENT();
     antlr4::tree::TerminalNode* IDENT(size_t i);
+    PointerPrefixContext *pointerPrefix();
     std::vector<antlr4::tree::TerminalNode *> L_BRACK();
     antlr4::tree::TerminalNode* L_BRACK(size_t i);
     std::vector<ExpContext *> exp();
@@ -702,6 +711,7 @@ public:
     NumberContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *IntConst();
+    antlr4::tree::TerminalNode *FloatConst();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -738,6 +748,19 @@ public:
   };
 
   ConstExpContext* constExp();
+
+  class  PointerPrefixContext : public antlr4::ParserRuleContext {
+  public:
+    PointerPrefixContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *MUL();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  PointerPrefixContext* pointerPrefix();
 
 
   bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;

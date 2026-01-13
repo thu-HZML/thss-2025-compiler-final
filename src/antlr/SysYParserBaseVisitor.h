@@ -187,6 +187,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitPointerPrefix(SysYParser::PointerPrefixContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
 
 };
 

@@ -1,0 +1,11 @@
+float get_avg(float a, float b) {
+    return (a + b) / 2.0;
+}
+
+int main() {
+    // (10.0 + 21.0) / 2.0 = 15.5
+    float res = get_avg(10.0, 21.0); 
+    putfloat(res);
+    putch(10);
+    return 0;
+}

@@ -33,47 +33,138 @@ public:
     }
 
     // 1. Alloca
-    ValuePtr CreateAlloca(const std::string &typeStr)
+    ValuePtr CreateAlloca(Type *ty)
     {
         std::string name = nextName();
-        std::string args = typeStr + ", align 4";
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "alloca", args);
+        // 参数字符串： "i32, align 4"
+        std::string args = ty->toString() + ", align 4";
+
+        // 关键修复：alloca 的返回值类型是指向该类型的指针 (ty*)
+        Type *ptrTy = Type::getPointerTy(ty);
+
+        auto inst = std::make_unique<Instruction>(ptrTy, name, "alloca", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
 
-    // 2. Store
+    // 浮点运算辅助方法
+    ValuePtr CreateFAdd(ValuePtr lhs, ValuePtr rhs)
+    {
+        auto inst = std::make_unique<BinaryInst>("fadd", lhs, rhs, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    ValuePtr CreateFSub(ValuePtr lhs, ValuePtr rhs)
+    {
+        auto inst = std::make_unique<BinaryInst>("fsub", lhs, rhs, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    ValuePtr CreateFMul(ValuePtr lhs, ValuePtr rhs)
+    {
+        auto inst = std::make_unique<BinaryInst>("fmul", lhs, rhs, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    ValuePtr CreateFDiv(ValuePtr lhs, ValuePtr rhs)
+    {
+        auto inst = std::make_unique<BinaryInst>("fdiv", lhs, rhs, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    // 浮点比较
+    ValuePtr CreateFCmp(std::string pred, ValuePtr lhs, ValuePtr rhs)
+    {
+        auto inst = std::make_unique<FCmpInst>(pred, lhs, rhs, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    // 类型转换
+    ValuePtr CreateFPTOSI(ValuePtr val)
+    {
+        auto inst = std::make_unique<FPTOSIInst>(val, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    ValuePtr CreateSITOFP(ValuePtr val)
+    {
+        auto inst = std::make_unique<SITOFPInst>(val, nextName());
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
+    // 2. Store - 通用 (Merge Fix)
     void CreateStore(ValuePtr val, ValuePtr ptr)
     {
-        std::string args = val->getType()->toString() + " " + val->to_string() + ", " + ptr->getType()->toString() + " " + ptr->to_string() + ", align 4";
+        std::string valTypeStr = val->getType()->toString(); // "i32" 或 "i32*"
+        std::string ptrTypeStr = ptr->getType()->toString(); // "i32*" 或 "i32**"
+
+        // 指针通常用 8字节对齐，整数用 4字节
+        std::string align = val->getType()->isPointerTy() ? ", align 8" : ", align 4";
+
+        std::string args = valTypeStr + " " + val->to_string() + ", " +
+                           ptrTypeStr + " " + ptr->to_string() + align;
+
         currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
     }
 
+    // 保留重载版本用于存立即数
     void CreateStore(int val, ValuePtr ptr)
     {
-        std::string args = "i32 " + std::to_string(val) + ", i32* " + ptr->to_string() + ", align 4";
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "store", args));
+        CreateStore(new ConstantInt(val), ptr);
     }
 
-    // 3. Load - 增强版本
+    // 3. Load - 通用 (Merge Fix)
     ValuePtr CreateLoad(ValuePtr ptr)
     {
         std::string name = nextName();
-        Type *valType = static_cast<Type *>(ptr->getType())->elementType;
+        Type *ptrType = ptr->getType();
+        Type *valType;
 
-        std::string args = valType->toString() + ", " + ptr->getType()->toString() + " " + ptr->to_string() + ", align 4";
+        // 推导加载出的值的类型：如果是 i32*，则加载出 i32；如果是 i32**，则加载出 i32*
+        if (ptrType->isPointerTy())
+        {
+            valType = ptrType->elementType;
+        }
+        else
+        {
+            // 默认回退情况
+            valType = Type::getInt32Ty();
+        }
+
+        std::string align = valType->isPointerTy() ? ", align 8" : ", align 4";
+
+        std::string args = valType->toString() + ", " +
+                           ptrType->toString() + " " + ptr->to_string() + align;
+
         auto inst = std::make_unique<Instruction>(valType, name, "load", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
-
     // 4. Ret
     void CreateRet(ValuePtr val)
     {
+        std::string name = ""; // ret 指令没有返回值变量名
+        // [修复] 使用 val->getType()->toString() 动态获取类型 (如 "float" 或 "i32")
         std::string args = val->getType()->toString() + " " + val->to_string();
-        currentBlock->addInstruction(std::make_unique<Instruction>(Type::getVoidTy(), "", "ret", args));
+
+        auto inst = std::make_unique<Instruction>(Type::getVoidTy(), name, "ret", args);
+        currentBlock->addInstruction(std::move(inst));
     }
 
     // 支持 void 返回
@@ -97,33 +188,57 @@ public:
     {
         std::string name = nextName();
         std::string args = cond + " i32 " + lhs->to_string() + ", " + rhs->to_string();
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "icmp", args);
+        auto inst = std::make_unique<Instruction>(Type::getInt1Ty(), name, "icmp", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
 
     // 7. ZExt - 增强版本
-    ValuePtr CreateZExt(ValuePtr val)
+    ValuePtr CreateZExt(ValuePtr val, Type *targetTy = nullptr)
     {
+        if (!targetTy)
+            targetTy = Type::getInt32Ty();
+
         std::string name = nextName();
-        std::string args = "i1 " + val->to_string() + " to i32";
-        auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "zext", args);
+        std::string args = val->getType()->toString() + " " + val->to_string() + " to " + targetTy->toString();
+        auto inst = std::make_unique<Instruction>(targetTy, name, "zext", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
 
+    ValuePtr CreateAdd(ValuePtr lhs, ValuePtr rhs)
+    {
+        return CreateBinary("add", lhs, rhs);
+    }
+
+    ValuePtr CreateSub(ValuePtr lhs, ValuePtr rhs)
+    {
+        return CreateBinary("sub", lhs, rhs);
+    }
+
     // 8. GEP (支持扁平化数组寻址)
     // 扁平化后，数组总是一维 [Size x i32]
     // 访问时使用 calculated_index
-    ValuePtr CreateGEP(ValuePtr ptr, ValuePtr idx, int totalSize)
+    ValuePtr CreateGEP(ValuePtr ptr, ValuePtr idx, int arraySize)
     {
         std::string name = nextName();
-        std::string type = "[" + std::to_string(totalSize) + " x i32]";
-        std::string args = "inbounds " + type + ", " + type + "* " + ptr->to_string() + ", i32 0, i32 " + idx->to_string();
 
-        auto inst = std::make_unique<Instruction>(Type::getPointerTy(Type::getInt32Ty()), name, "getelementptr", args);
+        // 从 ptr 中获取实际的类型
+        // ptr 类型通常是 [N x float]* 或 [N x i32]*
+        Type *ptrType = ptr->getType();
+        Type *arrayType = ptrType->elementType;     // 获取 [N x float]
+        Type *elementType = arrayType->elementType; // 获取 float 或 i32
+
+        std::string typeStr = arrayType->toString(); // e.g. "[3 x float]"
+
+        // 构造指令: getelementptr inbounds [3 x float], [3 x float]* %ptr, i32 0, i32 %idx
+        std::string args = "inbounds " + typeStr + ", " + ptrType->toString() + " " + ptr->to_string() +
+                           ", i32 0, i32 " + idx->to_string();
+
+        // 结果类型是指向元素的指针 (float* 或 i32*)
+        auto inst = std::make_unique<Instruction>(Type::getPointerTy(elementType), name, "getelementptr", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
@@ -149,34 +264,26 @@ public:
     }
 
     // 9. Call 支持不同数量的参数
-    ValuePtr CreateCall(const std::string &funcName, const std::vector<ValuePtr> &args, bool isVoid = false)
+    ValuePtr CreateCall(std::string funcName, std::vector<ValuePtr> args, Type *retType)
     {
-        std::string argsStr = "";
+        // 如果是 void，名字为空；否则生成临时变量名
+        std::string name = retType->isVoidTy() ? "" : nextName();
+
+        std::string argStr = "";
         for (size_t i = 0; i < args.size(); ++i)
         {
-            if (i > 0)
-                argsStr += ", ";
-            argsStr += args[i]->getType()->toString() + " " + args[i]->to_string();
+            argStr += args[i]->getType()->toString() + " " + args[i]->to_string();
+            if (i < args.size() - 1)
+                argStr += ", ";
         }
 
-        if (isVoid)
-        {
-            // Void 函数：不分配寄存器名字，指令类型为 void
-            auto inst = std::make_unique<Instruction>(Type::getVoidTy(), "", "call",
-                                                      "void @" + funcName + "(" + argsStr + ")");
-            currentBlock->addInstruction(std::move(inst));
-            return nullptr; // 或者返回一个空 Value
-        }
-        else
-        {
-            // 非 Void 函数：分配寄存器，类型为 i32
-            std::string name = nextName();
-            auto inst = std::make_unique<Instruction>(Type::getInt32Ty(), name, "call",
-                                                      "i32 @" + funcName + "(" + argsStr + ")");
-            ValuePtr res = inst.get();
-            currentBlock->addInstruction(std::move(inst));
-            return res;
-        }
+        // 构造指令: call float @func(i32 %0, ...)
+        std::string instArgs = retType->toString() + " @" + funcName + "(" + argStr + ")";
+
+        auto inst = std::make_unique<Instruction>(retType, name, "call", instArgs);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
     }
 
     // 10. 条件跳转 - 新增
@@ -298,6 +405,16 @@ public:
         return CreateZExt(cmp);
     }
 
+    ValuePtr CreateBitCast(ValuePtr val, Type *destTy)
+    {
+        std::string name = nextName();
+        std::string args = val->getType()->toString() + " " + val->to_string() + " to " + destTy->toString();
+        auto inst = std::make_unique<Instruction>(destTy, name, "bitcast", args);
+        ValuePtr res = inst.get();
+        currentBlock->addInstruction(std::move(inst));
+        return res;
+    }
+
     // 16. 数组访问助手函数 - 增强
     ValuePtr CreateArrayAccess(ValuePtr arrayPtr, ValuePtr index,
                                const std::vector<int> &dims)
@@ -356,10 +473,17 @@ public:
     ValuePtr CreatePointerGEP(ValuePtr ptr, ValuePtr idx)
     {
         std::string name = nextName();
-        // getelementptr i32, i32* %ptr, i32 %idx
-        std::string args = "i32, i32* " + ptr->to_string() + ", i32 " + idx->to_string();
 
-        auto inst = std::make_unique<Instruction>(Type::getPointerTy(Type::getInt32Ty()), name, "getelementptr", args);
+        // ptr 类型是 float* 或 i32*
+        Type *ptrType = ptr->getType();
+        Type *elementType = ptrType->elementType; // float 或 i32
+
+        // 构造指令: getelementptr float, float* %ptr, i32 %idx
+        std::string args = elementType->toString() + ", " + ptrType->toString() + " " + ptr->to_string() +
+                           ", i32 " + idx->to_string();
+
+        // 结果类型依然是指针 (float* 或 i32*)
+        auto inst = std::make_unique<Instruction>(ptrType, name, "getelementptr", args);
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;

@@ -1,8 +1,20 @@
-; ModuleID = 'moudle'
-source_filename = "moudle"
+declare i32 @getint()
+declare i32 @getch()
+declare float @getfloat()
+declare i32 @getarray(i32*)
+declare i32 @getfarray(float*)
+declare void @putint(i32)
+declare void @putch(i32)
+declare void @putfloat(float)
+declare void @putarray(i32, i32*)
+declare void @putfarray(i32, float*)
+declare void @starttime()
+declare void @stoptime()
+
+@a = dso_local global [10 x [10 x i32]] zeroinitializer, align 4
 
 define i32 @main() {
-mainEntry:
+entry0:
   ret i32 0
 }
 
