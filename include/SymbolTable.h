@@ -11,6 +11,7 @@ struct SymbolInfo
     ValuePtr value;
     bool isConst;
     int constIntVal;
+    float constFloatVal;
 
     // 数组扩展
     bool isArray;
@@ -37,11 +38,14 @@ public:
     }
 
     // 更新接口以支持 dimensions 和 isPointer
-    bool addSymbol(const std::string &name, TypePtr type, ValuePtr value, bool isConst = false, int constVal = 0, bool isArray = false, const std::vector<int> &dims = {}, bool isPointer = false)
+    bool addSymbol(const std::string &name, TypePtr type, ValuePtr value, 
+               bool isConst = false, int constVal = 0, float constFloatVal = 0.0f, // 新增参数
+               bool isArray = false, const std::vector<int> &dims = {}, bool isPointer = false) 
     {
         if (scopes.empty() || scopes.back().count(name))
             return false;
-        scopes.back()[name] = {type, value, isConst, constVal, isArray, dims, isPointer};
+        // 列表初始化时加上 constFloatVal
+        scopes.back()[name] = {type, value, isConst, constVal, constFloatVal, isArray, dims, isPointer};
         return true;
     }
 

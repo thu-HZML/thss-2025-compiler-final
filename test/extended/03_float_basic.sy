@@ -1,0 +1,15 @@
+int main() {
+    float a = 5.5;
+    float b = 2.0;
+    float c = a + b; // 7.5
+    float d = a - b; // 3.5
+    float e = a * b; // 11.0
+    float f = a / b; // 2.75
+
+    // 强转为 int 打印，避免 float 输出格式差异
+    putint(c); putch(32);
+    putint(d); putch(32);
+    putint(e); putch(32);
+    putint(f); putch(10);
+    return 0;
+}

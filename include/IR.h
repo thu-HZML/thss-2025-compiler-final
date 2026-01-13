@@ -17,7 +17,7 @@ using TypePtr = class Type*;
 // --- 1. 类型系统增强 ---
 class Type {
 public:
-    enum TypeID { IntTyID, Int1TyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
+    enum TypeID { IntTyID, Int1TyID, FloatTyID, VoidTyID, LabelTyID, FunctionTyID, PointerTyID, ArrayTyID };
     std::string irName;
     TypeID id;
     
@@ -32,7 +32,7 @@ public:
 
     static Type* getInt32Ty() { static Type t(IntTyID, "i32"); return &t; }
     static Type* getVoidTy() { static Type t(VoidTyID, "void"); return &t; }
-    
+    static Type* getFloatTy() { static Type t(FloatTyID, "float"); return &t; }
     static Type* getInt1Ty() { 
         static Type t(Int1TyID, "i1"); 
         return &t; 
@@ -60,6 +60,7 @@ public:
     bool isVoidTy() const { return id == VoidTyID; }
     bool isArrayTy() const { return id == ArrayTyID; }
     bool isPointerTy() const { return id == PointerTyID; }
+    bool isFloatTy() const { return id == FloatTyID; }
     
     // 获取类型字符串表示
     std::string toString() const {
@@ -114,6 +115,25 @@ public:
     }
 };
 
+class ConstantFloat : public Value {
+public:
+    float value;
+    ConstantFloat(float val) : Value(Type::getFloatTy(), std::to_string(val)), value(val) {}
+    
+    static ConstantFloat* get(float val) {
+        // 简单实现，实际可能需要缓存
+        return new ConstantFloat(val);
+    }
+
+    std::string to_string() const override {
+        // LLVM IR 要求浮点数使用 double 的十六进制格式以保持精度
+        double dval = (double)value;
+        char buffer[100];
+        sprintf(buffer, "0x%llx", *(unsigned long long*)&dval);
+        return std::string(buffer);
+    }
+};
+
 // --- 4. 指令基类 ---
 class Instruction : public Value {
 public:
@@ -151,6 +171,32 @@ public:
     }
 };
 
+// 支持浮点转换
+class FCastInst : public Instruction {
+public:
+    FCastInst(std::string op, ValuePtr val, Type* destTy, std::string name)
+        : Instruction(destTy, name, op, 
+                     val->getType()->toString() + " " + val->to_string() + 
+                     " to " + destTy->toString()) {}
+};
+class FPTOSIInst : public Instruction {
+public:
+    FPTOSIInst(ValuePtr val, std::string name)
+        : Instruction(Type::getInt32Ty(), name, "fptosi", 
+                     val->getType()->toString() + " " + val->to_string() + " to i32") {
+        addOperand(val);
+    }
+};
+
+class SITOFPInst : public Instruction {
+public:
+    SITOFPInst(ValuePtr val, std::string name)
+        : Instruction(Type::getFloatTy(), name, "sitofp", 
+                     val->getType()->toString() + " " + val->to_string() + " to float") {
+        addOperand(val);
+    }
+};
+
 // --- 6. 比较指令 ---
 class ICmpInst : public Instruction {
 public:
@@ -158,6 +204,17 @@ public:
     
     ICmpInst(std::string pred, ValuePtr lhs, ValuePtr rhs, std::string name)
         : Instruction(Type::getInt1Ty(), name, "icmp", 
+                     pred + " " + lhs->getType()->toString() + " " + lhs->to_string() + 
+                     ", " + rhs->to_string()), predicate(pred) {
+        addOperand(lhs);
+        addOperand(rhs);
+    }
+};
+class FCmpInst : public Instruction {
+public:
+    std::string predicate; // 如 oeq, ogt, olt 等
+    FCmpInst(std::string pred, ValuePtr lhs, ValuePtr rhs, std::string name)
+        : Instruction(Type::getInt1Ty(), name, "fcmp", 
                      pred + " " + lhs->getType()->toString() + " " + lhs->to_string() + 
                      ", " + rhs->to_string()), predicate(pred) {
         addOperand(lhs);
@@ -371,7 +428,7 @@ public:
     
     Function(Type* retType, const std::string& name)
         : Value(retType, "@" + name), returnType(retType) { // 在构造函数中初始化 returnType
-        blockList.push_back(std::make_unique<BasicBlock>("entry"));
+        //blockList.push_back(std::make_unique<BasicBlock>("entry"));
     }
     
     BasicBlock* getEntryBlock() { 
