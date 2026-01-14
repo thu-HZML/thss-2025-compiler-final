@@ -1,28 +1,84 @@
-; ModuleID = 'moudle'
-source_filename = "moudle"
+declare i32 @getint()
+declare i32 @getch()
+declare float @getfloat()
+declare i32 @getarray(i32*)
+declare i32 @getfarray(float*)
+declare void @putint(i32)
+declare void @putch(i32)
+declare void @putfloat(float)
+declare void @putarray(i32, i32*)
+declare void @putfarray(i32, float*)
+declare void @starttime()
+declare void @stoptime()
+
+@a = dso_local global i32 7, align 4
 
 define i32 @func() {
-mainEntry:
-  %b = alloca i32, align 4
-  %a = alloca i32, align 4
-  store i32 1, i32* %a = alloca i32, align 4, align 4
-  %0 = load i32, i32* %a = alloca i32, align 4, align 4
-  %1 = load i32, i32* %b = alloca i32, align 4, align 4
-  %2 = load i32, i32* %a = alloca i32, align 4, align 4
+entry0:
+  %alloc_1 = alloca i32, align 4
+  %alloc_0 = alloca i32, align 4
+  %0 = load i32, i32* @a, align 4
+  store i32 %0, i32* %alloc_0, align 4
+  store i32 1, i32* %alloc_1, align 4
+  %1 = load i32, i32* %alloc_1, align 4
+  %2 = load i32, i32* %alloc_0, align 4
+  %3 = icmp eq i32 %1, %2
+  %4 = zext i1 %3 to i32
+  %5 = icmp ne i32 %4, 0
+  br i1 %5, label %if.then0, label %if.else0
+if.then0:
+  %6 = load i32, i32* %alloc_1, align 4
+  %7 = add i32 %6, 1
+  store i32 %7, i32* %alloc_1, align 4
   ret i32 1
+if.else0:
+  ret i32 0
+if.merge0:
   ret i32 0
 }
 
 define i32 @main() {
-mainEntry:
-  %result = alloca i32, align 4
-  store i32 0, i32* %result = alloca i32, align 4, align 4
-  %i = alloca i32, align 4
-  store i32 0, i32* %i = alloca i32, align 4, align 4
-  %0 = load i32, i32* %i = alloca i32, align 4, align 4
-  %1 = load i32, i32* %result = alloca i32, align 4, align 4
-  %2 = load i32, i32* %i = alloca i32, align 4, align 4
-  %3 = load i32, i32* %result = alloca i32, align 4, align 4
+entry1:
+  %alloc_3 = alloca i32, align 4
+  %alloc_2 = alloca i32, align 4
+  store i32 0, i32* %alloc_2, align 4
+  store i32 0, i32* %alloc_3, align 4
+  br label %while.cond.0
+while.cond.0:
+  %0 = load i32, i32* %alloc_3, align 4
+  %1 = icmp slt i32 %0, 100
+  %2 = zext i1 %1 to i32
+  %3 = icmp ne i32 %2, 0
+  br i1 %3, label %while.body.0, label %while.merge.0
+while.body.0:
+  %4 = call i32 @func()
+  %5 = icmp eq i32 %4, 1
+  %6 = zext i1 %5 to i32
+  %7 = icmp ne i32 %6, 0
+  br i1 %7, label %if.then1, label %if.merge1
+if.then1:
+  %8 = load i32, i32* %alloc_2, align 4
+  %9 = add i32 %8, 1
+  store i32 %9, i32* %alloc_2, align 4
+  br label %if.merge1
+if.merge1:
+  %10 = load i32, i32* %alloc_3, align 4
+  %11 = add i32 %10, 1
+  store i32 %11, i32* %alloc_3, align 4
+  br label %while.cond.0
+while.merge.0:
+  %12 = load i32, i32* %alloc_2, align 4
+  %13 = icmp slt i32 %12, 100
+  %14 = zext i1 %13 to i32
+  %15 = icmp ne i32 %14, 0
+  br i1 %15, label %if.then2, label %if.else2
+if.then2:
+  call void @putint(i32 1)
+  br label %if.merge2
+if.else2:
+  call void @putint(i32 0)
+  br label %if.merge2
+if.merge2:
   ret i32 0
 }
 

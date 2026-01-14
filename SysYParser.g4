@@ -4,13 +4,19 @@ options {
 	tokenVocab = SysYLexer;
 }
 
-compUnit: (decl | funcDef)* EOF;
+compUnit: (decl | funcDef | structDef)* EOF;
 
-decl: constDecl | varDecl;
+decl: constDecl | varDecl | structDecl;
+
+structDecl: structDef;
+
+structDef: STRUCT IDENT L_BRACE memberDef* R_BRACE SEMICOLON;
+
+memberDef: bType IDENT (L_BRACK constExp R_BRACK)* SEMICOLON;
 
 constDecl: CONST bType constDef (COMMA constDef)* SEMICOLON;
 
-bType: INT | FLOAT;
+bType: INT | FLOAT | STRUCT IDENT;
 
 constDef: IDENT (L_BRACK constExp R_BRACK)* ASSIGN constInitVal;
 
@@ -20,10 +26,10 @@ constInitVal:
 
 varDecl: bType varDef (COMMA varDef)* SEMICOLON;
 
-
 varDef:
-    pointerPrefix? IDENT (L_BRACK constExp R_BRACK)* (ASSIGN initVal)?
-    ;
+	pointerPrefix? IDENT (L_BRACK constExp R_BRACK)* (
+		ASSIGN initVal
+	)?;
 
 initVal: exp | L_BRACE (initVal (COMMA initVal)*)? R_BRACE;
 
@@ -34,7 +40,9 @@ funcType: VOID | INT | FLOAT;
 funcFParams: funcFParam (COMMA funcFParam)*;
 
 funcFParam:
-	bType pointerPrefix? IDENT (L_BRACK R_BRACK (L_BRACK exp R_BRACK)*)?;
+	bType pointerPrefix? IDENT (
+		L_BRACK R_BRACK (L_BRACK exp R_BRACK)*
+	)?;
 
 block: L_BRACE blockItem* R_BRACE;
 
@@ -57,21 +65,21 @@ stmt:
 	| RETURN exp? SEMICOLON	# returnStmt;
 
 exp:
-	lVal									# lValExp
-	| L_PAREN exp R_PAREN					# parenExp
-	| number								# numberExp
-	| IDENT L_PAREN funcRParams? R_PAREN	# funcCallExp
-	| (PLUS | MINUS | NOT | MUL | BITAND) exp # unaryExp
-	| exp (MUL | DIV | MOD) exp				# mulDivModExp
-	| exp (PLUS | MINUS) exp				# addSubExp
-	| exp (LT | GT | LE | GE) exp			# relExp
-	| exp (EQ | NEQ) exp					# eqNeqExp
-	| exp AND exp							# landExp
-	| exp OR exp							# lorExp;
+	lVal										# lValExp
+	| L_PAREN exp R_PAREN						# parenExp
+	| number									# numberExp
+	| IDENT L_PAREN funcRParams? R_PAREN		# funcCallExp
+	| (PLUS | MINUS | NOT | MUL | BITAND) exp	# unaryExp
+	| exp (MUL | DIV | MOD) exp					# mulDivModExp
+	| exp (PLUS | MINUS) exp					# addSubExp
+	| exp (LT | GT | LE | GE) exp				# relExp
+	| exp (EQ | NEQ) exp						# eqNeqExp
+	| exp AND exp								# landExp
+	| exp OR exp								# lorExp;
 
 cond: exp;
 
-lVal: pointerPrefix? IDENT (L_BRACK exp R_BRACK)*;
+lVal: pointerPrefix? IDENT (L_BRACK exp R_BRACK | DOT IDENT)*;
 
 number: IntConst | FloatConst;
 

@@ -1,0 +1,21 @@
+struct Node {
+    int val;
+    int arr[5];
+};
+
+struct Node nodes[2];
+
+int main() {
+    nodes[0].val = 100;
+    nodes[0].arr[3] = 42;
+    
+    nodes[1].val = 200;
+    nodes[1].arr[0] = 7;
+    
+    putint(nodes[0].val); putch(32);
+    putint(nodes[0].arr[3]); putch(10);
+    putint(nodes[1].val); putch(32);
+    putint(nodes[1].arr[0]); putch(10);
+    
+    return 0;
+}

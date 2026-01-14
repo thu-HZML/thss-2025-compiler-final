@@ -53,12 +53,12 @@ private:
     Function *currentFunction = nullptr;
 
     // 记录当前声明的基础类型 (int 或 float)
-    Type* currentDeclType = nullptr;
+    Type *currentDeclType = nullptr;
 
     // 用于记录 SysY 库中 void 函数的名称
     std::set<std::string> voidFuncs;
 
-    std::map<std::string, Type*> funcRetTypes;
+    std::map<std::string, Type *> funcRetTypes;
 
     // 循环上下文栈，用于break/continue语句
     std::stack<BasicBlock *> condBlockStack;  // 循环条件块栈
@@ -74,6 +74,23 @@ private:
     std::string getTokenText(antlr4::tree::TerminalNode *node)
     {
         return node ? node->getSymbol()->getText() : "";
+    }
+
+    Type *getBType(SysYParser::BTypeContext *ctx)
+    {
+        if (ctx->INT())
+            return Type::getInt32Ty();
+        if (ctx->FLOAT())
+            return Type::getFloatTy();
+        if (ctx->STRUCT())
+        {
+            std::string name = ctx->IDENT()->getText();
+            StructDef *def = symbolTable.lookupStruct(name);
+            if (!def)
+                throw std::runtime_error("Undefined struct: " + name);
+            return def->type;
+        }
+        return Type::getInt32Ty();
     }
 
     int parseInteger(const std::string &str)
@@ -118,9 +135,12 @@ private:
 
     float parseFloat(const std::string &str)
     {
-        try {
+        try
+        {
             return std::stof(str);
-        } catch (...) {
+        }
+        catch (...)
+        {
             return 0.0f;
         }
     }
@@ -201,7 +221,7 @@ private:
         }
         if (auto l = dynamic_cast<SysYParser::LValExpContext *>(ctx))
         {
-            std::string name = getTokenText(l->lVal()->IDENT());
+            std::string name = getTokenText(l->lVal()->IDENT(0));
             SymbolInfo *info = symbolTable.lookup(name);
             if (info && info->isConst && !info->isArray)
                 return info->constIntVal;
@@ -212,40 +232,57 @@ private:
     // --- 编译期常量求值 (Float) ---
     float evalFloatConstExp(SysYParser::ExpContext *ctx)
     {
-        if (!ctx) return 0.0f;
-        if (auto p = dynamic_cast<SysYParser::ParenExpContext *>(ctx)) return evalFloatConstExp(p->exp());
-        if (auto n = dynamic_cast<SysYParser::NumberExpContext *>(ctx)) {
+        if (!ctx)
+            return 0.0f;
+        if (auto p = dynamic_cast<SysYParser::ParenExpContext *>(ctx))
+            return evalFloatConstExp(p->exp());
+        if (auto n = dynamic_cast<SysYParser::NumberExpContext *>(ctx))
+        {
             std::string text = n->getText();
-            if (text.find('.') != std::string::npos || text.find('e') != std::string::npos || text.find('E') != std::string::npos) {
+            if (text.find('.') != std::string::npos || text.find('e') != std::string::npos || text.find('E') != std::string::npos)
+            {
                 return parseFloat(text);
             }
             return (float)parseInteger(text);
         }
-        if (auto u = dynamic_cast<SysYParser::UnaryExpContext *>(ctx)) {
+        if (auto u = dynamic_cast<SysYParser::UnaryExpContext *>(ctx))
+        {
             float val = evalFloatConstExp(u->exp());
-            if (u->MINUS()) return -val;
-            if (u->NOT()) return (float)(!((bool)val));
+            if (u->MINUS())
+                return -val;
+            if (u->NOT())
+                return (float)(!((bool)val));
             return val;
         }
-        if (auto m = dynamic_cast<SysYParser::MulDivModExpContext *>(ctx)) {
+        if (auto m = dynamic_cast<SysYParser::MulDivModExpContext *>(ctx))
+        {
             float l = evalFloatConstExp(m->exp(0));
             float r = evalFloatConstExp(m->exp(1));
-            if (m->MUL()) return l * r;
-            if (r == 0) return 0.0f;
-            if (m->DIV()) return l / r;
-            if (m->MOD()) return (float)((int)l % (int)r); // 浮点取模强转int
+            if (m->MUL())
+                return l * r;
+            if (r == 0)
+                return 0.0f;
+            if (m->DIV())
+                return l / r;
+            if (m->MOD())
+                return (float)((int)l % (int)r); // 浮点取模强转int
         }
-        if (auto a = dynamic_cast<SysYParser::AddSubExpContext *>(ctx)) {
+        if (auto a = dynamic_cast<SysYParser::AddSubExpContext *>(ctx))
+        {
             float l = evalFloatConstExp(a->exp(0));
             float r = evalFloatConstExp(a->exp(1));
             return a->PLUS() ? (l + r) : (l - r);
         }
-        if (auto l = dynamic_cast<SysYParser::LValExpContext *>(ctx)) {
-            std::string name = getTokenText(l->lVal()->IDENT());
+        if (auto l = dynamic_cast<SysYParser::LValExpContext *>(ctx))
+        {
+            std::string name = getTokenText(l->lVal()->IDENT(0));
             SymbolInfo *info = symbolTable.lookup(name);
-            if (info && info->isConst && !info->isArray) {
-                if (info->type->isFloatTy()) return info->constFloatVal;
-                if (info->type->isInt32Ty()) return (float)info->constIntVal;
+            if (info && info->isConst && !info->isArray)
+            {
+                if (info->type->isFloatTy())
+                    return info->constFloatVal;
+                if (info->type->isInt32Ty())
+                    return (float)info->constIntVal;
             }
         }
         return 0.0f;
@@ -253,87 +290,115 @@ private:
 
     ValuePtr getLValPointer(SysYParser::LValContext *ctx)
     {
-        std::string name = getTokenText(ctx->IDENT());
+        std::string name = ctx->IDENT(0)->getText();
         SymbolInfo *info = symbolTable.lookup(name);
-        if (!info) {
+        if (!info)
+        {
             std::cerr << "Undefined variable: " << name << std::endl;
             return nullptr;
         }
 
-        ValuePtr base = info->value;
-        
-        // 1. 检查修饰符
-        bool isDereference = (ctx->pointerPrefix() != nullptr); // 检查是否有 *
-        bool hasBrackets = !ctx->L_BRACK().empty();             // 检查是否有 [i]
+        ValuePtr currentPtr = info->value;
+        Type *currentType = info->type;
 
-        // 2. 处理指针变量 (int *p)
-        if (info->isPointer)
-        {
-            // 情况 A: p = &b (操作指针变量本身)
-            // 没有 * 且没有 [] -> 返回 p 在栈上的地址 (i32**)
-            if (!isDereference && !hasBrackets) {
-                return base;
-            }
-            
-            // 情况 B: *p = ... 或 p[i] = ... (操作指针指向的目标)
-            // 需要先读取 p 的值，得到它指向的地址 (i32*)
-            base = builder.CreateLoad(base); 
-        }
+        // 1. Handle explicit dereference prefix (*p)
+        bool isDereference = (ctx->pointerPrefix() != nullptr);
+        bool loadedPointer = false;
 
-        // 3. 处理显式解引用 (*p 或 *arr)
         if (isDereference)
         {
-            // 如果是 *p，此时 base 已经是 i32* (指向 int 的地址)，直接返回即可
-            // 如果是 *arr (数组名解引用)，base 是 [n x i32]*
-            if (info->isArray && !info->isPointer) {
-                 // 数组 *arr 等价于 arr[0]
-                 return builder.CreateGEP(base, ConstantInt::get(0), 0); // 这里的 0 是假参数，实际 GEP 会处理
-                 // 实际上对于一维数组，我们需要 decay 到指针
-                 Type* arrType = base->getType()->elementType; // [n x i32]
-                 return builder.CreateGEP(base, ConstantInt::get(0), arrType->arraySize);
+            if (info->isPointer)
+            {
+                // p is int*. info->value is int**. *p -> load p.
+                currentPtr = builder.CreateLoad(currentPtr);
+                currentType = currentType->elementType;
+                loadedPointer = true;
             }
-            return base;
-        }
-
-        // 4. 处理数组下标 (a[i] 或 p[i])
-        // 如果没有下标，直接返回
-        if (ctx->L_BRACK().empty()) {
-            // 此时 base 可能是 [10 x i32]* (数组) 或 i32* (指针)
-            return base;
-        }
-
-        ValuePtr offset = nullptr;
-        size_t n = ctx->exp().size();
-
-        for (size_t i = 0; i < n; ++i) {
-            ValuePtr idx = std::any_cast<ValuePtr>(visit(ctx->exp(i)));
-            idx = ensureType(idx, Type::getInt32Ty());
-
-            int stride = 1;
-            for (size_t k = i + 1; k < info->dims.size(); ++k)
-                stride *= info->dims[k];
-            
-            ValuePtr term = idx;
-            if (stride > 1) {
-                ValuePtr strideVal = ConstantInt::get(stride);
-                term = builder.CreateBinary("mul", idx, strideVal);
+            else if (info->isArray)
+            {
+                // *a -> a[0]. Decay array.
+                std::vector<ValuePtr> idxs = {ConstantInt::get(0), ConstantInt::get(0)};
+                currentPtr = builder.CreateInBoundsGEP(currentPtr, idxs, currentType);
+                currentType = currentType->elementType;
             }
-
-            if (!offset) offset = term;
-            else offset = builder.CreateBinary("add", offset, term);
         }
 
-        if (!offset) offset = ConstantInt::get(0);
+        // 2. Iterate over suffixes ([...], .x)
+        // Manual iteration to skip IDENT and pointerPrefix
+        int childIdx = 0;
+        // Skip pointerPrefix if exists
+        if (ctx->pointerPrefix())
+            childIdx++;
+        // Skip IDENT
+        childIdx++;
 
-        if (info->isPointer) {
-            // 指针下标 p[i]: base 已经是 i32*，直接 GEP
-            return builder.CreatePointerGEP(base, offset);
-        } else {
-            // 数组下标 a[i]: base 是 [N x i32]*
-            int totalSize = 1;
-            for (int d : info->dims) totalSize *= d;
-            return builder.CreateGEP(base, offset, totalSize);
+        while (childIdx < ctx->children.size())
+        {
+            std::string op = ctx->children[childIdx]->getText();
+
+            if (op == "[")
+            {
+                SysYParser::ExpContext *exp = dynamic_cast<SysYParser::ExpContext *>(ctx->children[childIdx + 1]);
+                ValuePtr idx = std::any_cast<ValuePtr>(visit(exp));
+
+                // Lazy load for pointer variable p[i]
+                if (info->isPointer && !loadedPointer && !isDereference)
+                {
+                    currentPtr = builder.CreateLoad(currentPtr);
+                    loadedPointer = true;
+                }
+
+                std::vector<ValuePtr> indices;
+                if (currentType->isArrayTy())
+                {
+                    indices.push_back(new ConstantInt(0));
+                    indices.push_back(idx);
+                    currentType = static_cast<Type *>(currentType)->elementType;
+                }
+                else if (currentType->isPointerTy())
+                {
+                    indices.push_back(idx);
+                    currentType = static_cast<Type *>(currentType)->elementType;
+                }
+                else
+                {
+                    throw std::runtime_error("Indexing non-array/non-pointer");
+                }
+
+                currentPtr = builder.CreateInBoundsGEP(currentPtr, indices, currentType);
+                childIdx += 3; // [ exp ]
+            }
+            else if (op == ".")
+            {
+                std::string member = ctx->children[childIdx + 1]->getText();
+
+                if (!currentType->isStructTy())
+                    throw std::runtime_error("Dot access on non-struct");
+
+                std::string structName = currentType->irName.substr(8);
+                StructDef *def = symbolTable.lookupStruct(structName);
+                if (!def)
+                    throw std::runtime_error("Unknown struct definition for " + structName);
+
+                auto it = def->memberIndices.find(member);
+                if (it == def->memberIndices.end())
+                    throw std::runtime_error("Unknown member " + member);
+                int idx = it->second;
+
+                std::vector<ValuePtr> indices = {new ConstantInt(0), new ConstantInt(idx)};
+
+                currentType = def->type->memberTypes[idx];
+                currentPtr = builder.CreateInBoundsGEP(currentPtr, indices, currentType);
+
+                childIdx += 2; // . IDENT
+            }
+            else
+            {
+                childIdx++;
+            }
         }
+
+        return currentPtr;
     }
 
     // Helper: 计算当前维度的 Block Size
@@ -351,8 +416,10 @@ private:
                              const std::vector<int> &dims, int dimLevel, bool isFloat)
     {
         int startIdx = currentIdx;
-        if (ctx->constExp()) {
-            if (currentIdx < target.size()) {
+        if (ctx->constExp())
+        {
+            if (currentIdx < target.size())
+            {
                 if constexpr (std::is_same_v<T, float>)
                     target[currentIdx++] = evalFloatConstExp(ctx->constExp()->exp());
                 else
@@ -360,12 +427,15 @@ private:
             }
             return;
         }
-        if (ctx->L_BRACE()) {
-            for (auto child : ctx->constInitVal()) {
+        if (ctx->L_BRACE())
+        {
+            for (auto child : ctx->constInitVal())
+            {
                 flattenConstInitVal(target, currentIdx, child, dims, dimLevel + 1, isFloat);
             }
             int blockSize = getDimSize(dims, dimLevel);
-            while (currentIdx < startIdx + blockSize && currentIdx < target.size()) {
+            while (currentIdx < startIdx + blockSize && currentIdx < target.size())
+            {
                 target[currentIdx++] = 0;
             }
         }
@@ -376,26 +446,69 @@ private:
                            const std::vector<int> &dims, int dimLevel)
     {
         int startIdx = currentIdx;
-        if (ctx->exp()) {
-            if (currentIdx < target.size()) {
+        if (ctx->exp())
+        {
+            if (currentIdx < target.size())
+            {
                 ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
                 // 关键：隐式转换
-                val = ensureType(val, currentDeclType); 
+                val = ensureType(val, currentDeclType);
                 target[currentIdx++] = val;
             }
             return;
         }
-        if (ctx->L_BRACE()) {
-            for (auto child : ctx->initVal()) {
+        if (ctx->L_BRACE())
+        {
+            for (auto child : ctx->initVal())
+            {
                 flattenVarInitVal(target, currentIdx, child, dims, dimLevel + 1);
             }
             int blockSize = getDimSize(dims, dimLevel);
-            while (currentIdx < startIdx + blockSize && currentIdx < target.size()) {
+            while (currentIdx < startIdx + blockSize && currentIdx < target.size())
+            {
                 // Padding 0
                 if (currentDeclType->isFloatTy())
                     target[currentIdx++] = ConstantFloat::get(0.0f);
                 else
                     target[currentIdx++] = ConstantInt::get(0);
+            }
+        }
+    }
+
+    // 新增：全局变量数组初始化扁平化（要求可在编译期求值，带 Padding）
+    template <typename T>
+    void flattenGlobalInitVal(std::vector<T> &target, int &currentIdx, SysYParser::InitValContext *ctx,
+                              const std::vector<int> &dims, int dimLevel)
+    {
+        int startIdx = currentIdx;
+        if (ctx->exp())
+        {
+            if (currentIdx < (int)target.size())
+            {
+                if constexpr (std::is_same_v<T, float>)
+                    target[currentIdx++] = evalFloatConstExp(ctx->exp());
+                else
+                    target[currentIdx++] = evalConstExp(ctx->exp());
+            }
+            else
+            {
+                currentIdx++;
+            }
+            return;
+        }
+        if (ctx->L_BRACE())
+        {
+            for (auto child : ctx->initVal())
+            {
+                flattenGlobalInitVal(target, currentIdx, child, dims, dimLevel + 1);
+            }
+            int blockSize = getDimSize(dims, dimLevel);
+            while (currentIdx < startIdx + blockSize && currentIdx < (int)target.size())
+            {
+                if constexpr (std::is_same_v<T, float>)
+                    target[currentIdx++] = 0.0f;
+                else
+                    target[currentIdx++] = 0;
             }
         }
     }
@@ -406,15 +519,10 @@ private:
         BasicBlock *entryBB = currentFunction->blockList.front().get();
         static int allocCounter = 0;
         int id = allocCounter++;
-        // 使用非数字名称以避免 LLVM 编号顺序约束
-        // 必须以 % 开头
+        // 重要：不要把源代码里的标识符直接拼进 LLVM SSA 名称。
+        // 一些测例会用极长/极端命名，导致 LLVM 解析阶段出现“multiple definition of local value”。
+        // 这里统一使用稳定的自动命名，和源变量名解耦。
         std::string varName = "%alloc_" + std::to_string(id);
-        if (!name.empty())
-        {
-            // 简单的清理名称中的非字母数字字符（如果需要），这里假设 name 合法
-            // 添加前缀区别于普通变量
-            varName = "%" + name + "_addr_" + std::to_string(id);
-        }
 
         auto allocInst = std::make_unique<AllocaInst>(type, varName);
         ValuePtr data = allocInst.get();
@@ -434,29 +542,36 @@ private:
     }
 
     // 将 val 转换为 targetTy 类型，如果类型不同则插入 cast 指令
-    ValuePtr ensureType(ValuePtr val, Type* targetTy) {
-        if (!val) return nullptr;
-        Type* srcTy = val->getType();
-        if (srcTy == targetTy) return val;
+    ValuePtr ensureType(ValuePtr val, Type *targetTy)
+    {
+        if (!val)
+            return nullptr;
+        Type *srcTy = val->getType();
+        if (srcTy == targetTy)
+            return val;
 
         // int -> float
-        if (srcTy->isInt32Ty() && targetTy->isFloatTy()) {
+        if (srcTy->isInt32Ty() && targetTy->isFloatTy())
+        {
             return builder.CreateSITOFP(val);
         }
         // float -> int
-        if (srcTy->isFloatTy() && targetTy->isInt32Ty()) {
+        if (srcTy->isFloatTy() && targetTy->isInt32Ty())
+        {
             return builder.CreateFPTOSI(val);
         }
         // i1 -> i32 (for logic ops used in arithmetic)
-        if (srcTy->isInt1Ty() && targetTy->isInt32Ty()) {
+        if (srcTy->isInt1Ty() && targetTy->isInt32Ty())
+        {
             return builder.CreateZExt(val, Type::getInt32Ty());
         }
         // i1 -> float
-        if (srcTy->isInt1Ty() && targetTy->isFloatTy()) {
+        if (srcTy->isInt1Ty() && targetTy->isFloatTy())
+        {
             auto i32Val = builder.CreateZExt(val, Type::getInt32Ty());
             return builder.CreateSITOFP(i32Val);
         }
-        
+
         return val;
     }
 
@@ -466,9 +581,13 @@ public:
         builder.module = module.get();
 
         // 初始化系统库函数为 void 类型
-        voidFuncs.insert("putint"); voidFuncs.insert("putch"); voidFuncs.insert("putfloat");
-        voidFuncs.insert("putarray"); voidFuncs.insert("putfarray");
-        voidFuncs.insert("starttime"); voidFuncs.insert("stoptime");
+        voidFuncs.insert("putint");
+        voidFuncs.insert("putch");
+        voidFuncs.insert("putfloat");
+        voidFuncs.insert("putarray");
+        voidFuncs.insert("putfarray");
+        voidFuncs.insert("starttime");
+        voidFuncs.insert("stoptime");
 
         funcRetTypes["putint"] = Type::getVoidTy();
         funcRetTypes["putch"] = Type::getVoidTy();
@@ -477,7 +596,7 @@ public:
         funcRetTypes["putfarray"] = Type::getVoidTy();
         funcRetTypes["starttime"] = Type::getVoidTy();
         funcRetTypes["stoptime"] = Type::getVoidTy();
-        
+
         // 2. Int 类型
         funcRetTypes["getint"] = Type::getInt32Ty();
         funcRetTypes["getch"] = Type::getInt32Ty();
@@ -500,15 +619,18 @@ public:
             {
                 std::string name = getTokenText(func->IDENT());
                 std::string typeStr = func->funcType()->getText();
-                
-                Type* retType = Type::getInt32Ty();
-                if (typeStr == "void") {
+
+                Type *retType = Type::getInt32Ty();
+                if (typeStr == "void")
+                {
                     retType = Type::getVoidTy();
                     voidFuncs.insert(name);
-                } else if (typeStr == "float") {
+                }
+                else if (typeStr == "float")
+                {
                     retType = Type::getFloatTy();
                 }
-                
+
                 // 记录函数返回类型
                 funcRetTypes[name] = retType;
             }
@@ -521,22 +643,78 @@ public:
                 visit(func);
             else if (auto decl = dynamic_cast<SysYParser::DeclContext *>(child))
                 visit(decl);
+            else if (auto st = dynamic_cast<SysYParser::StructDefContext *>(child))
+                visit(st);
         }
         return nullptr;
     }
 
-    antlrcpp::Any visitFuncDef(SysYParser::FuncDefContext *ctx) override {
-        std::string name = getTokenText(ctx->IDENT());
-        
-        // 1. 处理返回类型
+    antlrcpp::Any visitStructDef(SysYParser::StructDefContext *ctx) override
+    {
+        std::string name = ctx->IDENT()->getText();
+
+        std::vector<Type *> memberTypes;
+        std::vector<std::string> memberNames;
+
+        for (auto memberCtx : ctx->memberDef())
+        {
+            Type *baseType = getBType(memberCtx->bType());
+            std::string memberName = memberCtx->IDENT()->getText();
+
+            std::vector<int> dims;
+            for (auto exp : memberCtx->constExp())
+            {
+                dims.push_back(evalConstExp(exp->exp()));
+            }
+
+            Type *type = baseType;
+            for (auto it = dims.rbegin(); it != dims.rend(); ++it)
+            {
+                type = Type::getArrayTy(type, *it);
+            }
+
+            memberTypes.push_back(type);
+            memberNames.push_back(memberName);
+        }
+
+        Type *structType = Type::getStructTy(name, memberTypes);
+        if (!symbolTable.addStruct(name, structType, memberNames))
+        {
+            std::cerr << "Redefinition of struct " << name << std::endl;
+        }
+
+        std::stringstream ss;
+        ss << structType->toString() << " = type { ";
+        for (size_t i = 0; i < memberTypes.size(); ++i)
+        {
+            if (i > 0)
+                ss << ", ";
+            ss << memberTypes[i]->toString();
+        }
+        ss << " }";
+        module->globalLines.push_back(ss.str());
+
+        return nullptr;
+    }
+
+    antlrcpp::Any visitFuncDef(SysYParser::FuncDefContext *ctx) override
+    {
+        std::string name = ctx->IDENT()->getText();
+
+        // 1. Return Type
         std::string typeStr = ctx->funcType()->getText();
         TypePtr returnType;
-        if (typeStr == "void") {
+        if (typeStr == "void")
+        {
             returnType = Type::getVoidTy();
             voidFuncs.insert(name);
-        } else if (typeStr == "float") {
+        }
+        else if (typeStr == "float")
+        {
             returnType = Type::getFloatTy();
-        } else {
+        }
+        else
+        {
             returnType = Type::getInt32Ty();
         }
         funcRetTypes[name] = returnType;
@@ -545,88 +723,80 @@ public:
         module->addFunction(std::unique_ptr<Function>(currentFunction));
         symbolTable.enterScope();
 
-        // 创建 Entry Block
+        // Entry Block
         BasicBlock *entryBB = new BasicBlock(getUniqueBasicBlockName("entry"));
         currentFunction->addBasicBlock(entryBB);
         builder.setInsertPoint(entryBB);
         builder.reset();
 
-        // 2. 处理参数
-        int argIndex = 0; // 用于追踪参数寄存器编号
-        if (ctx->funcFParams()) {
-            for (auto param : ctx->funcFParams()->funcFParam()) {
-                std::string paramName = getTokenText(param->IDENT());
-                std::string argReg = "%arg" + std::to_string(argIndex); // 参数的原始值
+        // 2. Params
+        int argIndex = 0;
+        if (ctx->funcFParams())
+        {
+            for (auto param : ctx->funcFParams()->funcFParam())
+            {
+                std::string paramName = param->IDENT()->getText();
+                std::string argReg = "%arg" + std::to_string(argIndex);
 
-                // 识别参数基础类型
-                Type* paramType = Type::getInt32Ty();
-                if (param->bType()->getText() == "float") paramType = Type::getFloatTy();
+                Type *baseType = getBType(param->bType());
 
-                // 检查是否是数组定义 (int a[])
                 bool isArrayDecl = !param->L_BRACK().empty();
+                bool isPtrDecl = (param->pointerPrefix() != nullptr);
+
                 std::vector<int> dims;
-                if (isArrayDecl) {
-                    dims.push_back(0); // 第一维省略
-                    for (auto expr : param->exp()) {
+                if (isArrayDecl)
+                {
+                    dims.push_back(0);
+                    for (auto expr : param->exp())
+                    {
                         dims.push_back(evalConstExp(expr));
                     }
                 }
 
-                // 检查是否是指针定义 (int *p)
-                bool isPtrDecl = (param->pointerPrefix() != nullptr);
-
-                currentFunction->args.push_back(argReg); // 记录参数名
-
-                // 逻辑分支：处理不同类型的参数
-                if (isArrayDecl || isPtrDecl) {
-                    // 数组作为指针传递，或者显式指针参数
-                    // 参数类型在 IR 层面上是 int* 或 float*
-                    Type* ptrType = Type::getPointerTy(paramType);
-                    currentFunction->argTypes.push_back(ptrType);
-                    
-                    ValuePtr argVal = new Value(ptrType, argReg);
-                    
-                    // 在栈上分配空间存储参数地址 (i32** 或 float**)
-                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, paramName + "_addr");
-                    
-                    // 将参数值存入栈
-                    builder.CreateStore(argVal, allocaPtr); // 注意：这里使用了通用的 CreateStore
-
-                    // 注册到符号表
-                    // 注意 addSymbol 签名: (name, type, val, isConst, intVal, floatVal, isArray, dims, isPointer)
-                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, isArrayDecl, dims, true);
-                } 
-                else {
-                    // 普通标量参数 (int 或 float)
-                    currentFunction->argTypes.push_back(paramType);
-                    ValuePtr argVal = new Value(paramType, argReg);
-                    
-                    // 在栈上分配空间
-                    ValuePtr allocaPtr = createEntryBlockAlloca(paramType, paramName + "_addr");
-                    
-                    // 存入栈
-                    builder.CreateStore(argVal, allocaPtr);
-                    
-                    // 注册到符号表
-                    symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, false, {}, false);
+                Type *paramType = baseType;
+                if (isArrayDecl)
+                {
+                    for (size_t k = dims.size() - 1; k >= 1; --k)
+                    {
+                        paramType = Type::getArrayTy(paramType, dims[k]);
+                    }
+                    paramType = Type::getPointerTy(paramType);
                 }
-                
+                else if (isPtrDecl)
+                {
+                    paramType = Type::getPointerTy(paramType);
+                }
+
+                currentFunction->args.push_back(argReg);
+                currentFunction->argTypes.push_back(paramType);
+
+                ValuePtr allocaPtr = builder.CreateAlloca(paramType);
+                ValuePtr argVal = new Value(paramType, argReg);
+                builder.CreateStore(argVal, allocaPtr);
+
+                symbolTable.addSymbol(paramName, paramType, allocaPtr, false, 0, 0.0f, isArrayDecl, dims, isPtrDecl || isArrayDecl);
+
                 argIndex++;
             }
-            // 更新 builder 的寄存器计数，避免和参数名冲突
-            builder.regCounter = argIndex; 
+            builder.regCounter = argIndex;
         }
 
-        // 处理函数体
-        if (ctx->block()) {
-            for (auto item : ctx->block()->blockItem()) visit(item);
+        // Body
+        if (ctx->block())
+        {
+            for (auto item : ctx->block()->blockItem())
+                visit(item);
         }
 
-        // 补全 return
-        if (!builder.getInsertBlock()->isTerminated()) {
-            if (returnType->isVoidTy()) builder.CreateVoidRet();
-            else if (returnType->isFloatTy()) builder.CreateRet(ConstantFloat::get(0.0f));
-            else builder.CreateRet(ConstantInt::get(0));
+        // Return fix
+        if (!builder.getInsertBlock()->isTerminated())
+        {
+            if (returnType->isVoidTy())
+                builder.CreateVoidRet();
+            else if (returnType->isFloatTy())
+                builder.CreateRet(ConstantFloat::get(0.0f));
+            else
+                builder.CreateRet(ConstantInt::get(0));
         }
 
         symbolTable.exitScope();
@@ -665,11 +835,15 @@ public:
             return visit(ctx->constDecl());
         if (ctx->varDecl())
             return visit(ctx->varDecl());
+        if (ctx->structDecl())
+            return visit(ctx->structDecl());
         return nullptr;
     }
 
     antlrcpp::Any visitConstDecl(SysYParser::ConstDeclContext *ctx) override
     {
+        Type *baseType = getBType(ctx->bType());
+
         for (auto def : ctx->constDef())
         {
             std::string name = getTokenText(def->IDENT());
@@ -677,14 +851,18 @@ public:
             if (!def->L_BRACK().empty())
             {
                 std::vector<int> dims;
-                int totalSize = 1;
                 for (auto d : def->constExp())
                 {
-                    int sz = evalConstExp(d->exp());
-                    dims.push_back(sz);
-                    totalSize *= sz;
+                    dims.push_back(evalConstExp(d->exp()));
                 }
 
+                Type *fullType = baseType;
+                for (auto it = dims.rbegin(); it != dims.rend(); ++it)
+                {
+                    fullType = Type::getArrayTy(fullType, *it);
+                }
+
+                int totalSize = getTypeSize(fullType);
                 std::vector<int> initValues(totalSize, 0);
                 if (def->constInitVal())
                 {
@@ -694,258 +872,301 @@ public:
 
                 if (currentFunction)
                 {
-                    // 使用 createEntryBlockAlloca 替代 builder.CreateAlloca 防止在循环中并不停分配栈空间
-                    Type *arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
-                    ValuePtr ptr = createEntryBlockAlloca(arrType);
-                    symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, 0.0f, true, dims);
+                    // Local
+                    ValuePtr ptr = createEntryBlockAlloca(fullType, name);
+                    symbolTable.addSymbol(name, fullType, ptr, true, 0, 0.0f, true, dims);
 
-                    // 局部常量数组必须全部存储，包括 0 值，因为 alloca 内存未初始化
+                    Type *flatPtrTy = Type::getPointerTy(Type::getInt32Ty());
+                    ValuePtr flatPtr = builder.CreateBitCast(ptr, flatPtrTy);
+
                     for (int i = 0; i < totalSize; ++i)
                     {
                         ValuePtr idxVal = new ConstantInt(i);
-                        ValuePtr elemPtr = builder.CreateGEP(ptr, idxVal, totalSize);
+                        std::vector<ValuePtr> idxs = {idxVal};
+                        ValuePtr elemPtr = builder.CreateInBoundsGEP(flatPtr, idxs, Type::getInt32Ty());
                         builder.CreateStore(ConstantInt::get(initValues[i]), elemPtr);
                     }
                 }
                 else
                 {
+                    // Global
                     std::stringstream ss;
-                    ss << "@" << name << " = dso_local constant [" << totalSize << " x i32] [";
-                    for (int i = 0; i < totalSize; ++i)
-                    {
-                        ss << "i32 " << initValues[i];
-                        if (i < totalSize - 1)
-                            ss << ", ";
-                    }
-                    ss << "], align 16";
+                    int offset = 0;
+                    std::string initStr = printGlobalConstInit(fullType, initValues, offset);
+
+                    ss << "@" << name << " = dso_local constant " << initStr << ", align 16";
                     module->globalLines.push_back(ss.str());
 
-                    Type* arrType = Type::getArrayTy(Type::getInt32Ty(), totalSize);
-                    ValuePtr ptr = new Value(Type::getPointerTy(arrType), "@" + name);
-                    symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, 0, 0.0f, true, dims);
+                    ValuePtr ptr = new Value(Type::getPointerTy(fullType), "@" + name);
+                    symbolTable.addSymbol(name, fullType, ptr, true, 0, 0.0f, true, dims);
                 }
                 continue;
             }
 
-            // 标量处理
+            // Scalar
             if (!def->constInitVal()->constExp())
                 continue;
-            int val = evalConstExp(def->constInitVal()->constExp()->exp());
 
             if (currentFunction)
             {
-                ValuePtr ptr = createEntryBlockAlloca(Type::getInt32Ty());
-                builder.CreateStore(ConstantInt::get(val), ptr);
-                symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, val);
+                ValuePtr ptr = createEntryBlockAlloca(baseType);
+                if (baseType->isFloatTy())
+                {
+                    float fval = evalFloatConstExp(def->constInitVal()->constExp()->exp());
+                    builder.CreateStore(ConstantFloat::get(fval), ptr);
+                    symbolTable.addSymbol(name, baseType, ptr, true, 0, fval);
+                }
+                else
+                {
+                    int val = evalConstExp(def->constInitVal()->constExp()->exp());
+                    builder.CreateStore(ConstantInt::get(val), ptr);
+                    symbolTable.addSymbol(name, baseType, ptr, true, val);
+                }
             }
             else
             {
-                std::string ir = "@" + name + " = dso_local constant i32 " + std::to_string(val) + ", align 4";
+                std::string ir;
+                if (baseType->isFloatTy())
+                {
+                    float fval = evalFloatConstExp(def->constInitVal()->constExp()->exp());
+                    ir = "@" + name + " = dso_local constant float " + ConstantFloat::get(fval)->to_string() + ", align 4";
+                    ValuePtr ptr = new Value(Type::getPointerTy(baseType), "@" + name);
+                    symbolTable.addSymbol(name, baseType, ptr, true, 0, fval);
+                }
+                else
+                {
+                    int val = evalConstExp(def->constInitVal()->constExp()->exp());
+                    ir = "@" + name + " = dso_local constant i32 " + std::to_string(val) + ", align 4";
+                    ValuePtr ptr = new Value(Type::getPointerTy(baseType), "@" + name);
+                    symbolTable.addSymbol(name, baseType, ptr, true, val);
+                }
                 module->globalLines.push_back(ir);
-                ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);
-                
-                // 注册到符号表：类型是 i32 (SysY语义)，Value是 i32* (IR语义)
-                symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, true, val);
             }
         }
         return nullptr;
     }
 
-    antlrcpp::Any visitVarDecl(SysYParser::VarDeclContext *ctx) override {
-        // [关键修改] 获取当前声明的基础类型 (int 或 float)
-        Type *declType = Type::getInt32Ty(); // 默认为 int
-        if (ctx->bType()->FLOAT())
+    int getTypeSize(Type *t)
+    {
+        if (t->isArrayTy())
+            return t->arraySize * getTypeSize(t->elementType);
+        return 1;
+    }
+
+    void processArrayInit(SysYParser::InitValContext *ctx, Type *type, int &offset, ValuePtr flatBasePtr)
+    {
+        Type *scalarTy = flatBasePtr->getType()->elementType;
+
+        if (ctx->exp())
         {
-            declType = Type::getFloatTy();
+            ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
+            if (!val)
+                return;
+            val = ensureType(val, scalarTy);
+            std::vector<ValuePtr> idxs = {ConstantInt::get(offset)};
+            ValuePtr elemPtr = builder.CreateInBoundsGEP(flatBasePtr, idxs, scalarTy);
+            builder.CreateStore(val, elemPtr);
+            offset++;
+            return;
         }
 
-        currentDeclType = declType;
+        int startOffset = offset;
+        // Braces
+        for (auto child : ctx->initVal())
+        {
+            if (child->exp())
+            {
+                // Element is scalar
+                processArrayInit(child, type, offset, flatBasePtr);
+            }
+            else
+            {
+                Type *subType = type->isArrayTy() ? type->elementType : type;
+                processArrayInit(child, subType, offset, flatBasePtr);
+            }
+        }
+
+        int currentSize = getTypeSize(type);
+        int endOffset = startOffset + currentSize;
+        while (offset < endOffset)
+        {
+            std::vector<ValuePtr> idxs = {ConstantInt::get(offset)};
+            ValuePtr elemPtr = builder.CreateInBoundsGEP(flatBasePtr, idxs, scalarTy);
+            ValuePtr zero = scalarTy->isFloatTy() ? (ValuePtr)ConstantFloat::get(0.0f) : (ValuePtr)ConstantInt::get(0);
+            builder.CreateStore(zero, elemPtr);
+            offset++;
+        }
+    }
+
+    std::string printGlobalConstInit(Type *type, const std::vector<int> &data, int &offset)
+    {
+        if (!type->isArrayTy())
+        {
+            return "i32 " + std::to_string(data[offset++]);
+        }
+        std::stringstream ss;
+        ss << type->toString() << " [";
+        int elemCount = type->arraySize;
+        Type *elemType = type->elementType;
+        for (int i = 0; i < elemCount; ++i)
+        {
+            ss << printGlobalConstInit(elemType, data, offset);
+            if (i < elemCount - 1)
+                ss << ", ";
+        }
+        ss << "]";
+        return ss.str();
+    }
+
+    std::string printGlobalFloatInit(Type *type, const std::vector<float> &data, int &offset)
+    {
+        if (!type->isArrayTy())
+        {
+            return "float " + ConstantFloat::get(data[offset++])->to_string();
+        }
+        std::stringstream ss;
+        ss << type->toString() << " [";
+        int elemCount = type->arraySize;
+        Type *elemType = type->elementType;
+        for (int i = 0; i < elemCount; ++i)
+        {
+            ss << printGlobalFloatInit(elemType, data, offset);
+            if (i < elemCount - 1)
+                ss << ", ";
+        }
+        ss << "]";
+        return ss.str();
+    }
+
+    antlrcpp::Any visitVarDecl(SysYParser::VarDeclContext *ctx) override
+    {
+        Type *baseType = getBType(ctx->bType());
 
         for (auto def : ctx->varDef())
         {
-            std::string name = getTokenText(def->IDENT());
-            bool isPointer = (def->pointerPrefix() != nullptr); // 检查是否有 *
+            std::string name = def->IDENT()->getText();
 
-            if (isPointer) {
-                // 指针变量 int *p
-                // IR: %p = alloca i32*
-                Type* ptrType = Type::getPointerTy(Type::getInt32Ty());
-                
-                if (currentFunction) {
-                    // 局部指针
-                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, name); // i32**
-                    
-                    // [修复] 补全 addSymbol 参数，加入 0.0f
-                    // 参数顺序: name, type, val, isConst, intVal, floatVal, isArray, dims, isPointer
-                    symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, 0.0f, false, {}, true);
-
-                    if (def->ASSIGN() && def->initVal()) {
-                        // int *p = &a;
-                        ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
-                        if (initVal) {
-                            builder.CreateStore(initVal, allocaPtr);
-                        }
-                    }
-                } else {
-                    std::cerr << "Global pointer not supported in this simplified demo.\n";
-                }
-                continue; // 处理完指针，跳过后续标量/数组逻辑
-            }
-
-            // === 数组处理 ===
-            if (!def->L_BRACK().empty())
+            // 1. Pointer Declaration (int *p)
+            bool isPtrDecl = (def->pointerPrefix() != nullptr);
+            if (isPtrDecl)
             {
-                std::vector<int> dims;
-                int totalSize = 1;
-                for (auto d : def->constExp())
-                {
-                    int sz = evalConstExp(d->exp());
-                    dims.push_back(sz);
-                    totalSize *= sz;
-                }
-
-                Type *arrType = Type::getArrayTy(declType, totalSize);
+                Type *ptrType = Type::getPointerTy(baseType);
 
                 if (currentFunction)
                 {
-                    // [局部数组]
-                    ValuePtr ptr = createEntryBlockAlloca(arrType);
-                    // 注册符号表
-                    symbolTable.addSymbol(name, declType, ptr, false, 0, 0.0f, true, dims);
+                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, name);
+                    symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, 0.0f, false, {}, true);
 
                     if (def->ASSIGN() && def->initVal())
                     {
-                        std::vector<ValuePtr> initVals(totalSize);
-                        ValuePtr zeroVal = declType->isFloatTy() ? 
-                                           (ValuePtr)ConstantFloat::get(0.0f) : 
-                                           (ValuePtr)ConstantInt::get(0);
-                        std::fill(initVals.begin(), initVals.end(), zeroVal);
-
-                        int idx = 0;
-                        flattenVarInitVal(initVals, idx, def->initVal(), dims, 0);
-
-                        for (int i = 0; i < totalSize; ++i)
+                        if (def->initVal()->exp())
                         {
-                            ValuePtr idxVal = ConstantInt::get(i);
-                            ValuePtr elemPtr = builder.CreateGEP(ptr, idxVal, totalSize);
-                            builder.CreateStore(initVals[i], elemPtr);
+                            ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
+                            builder.CreateStore(initVal, allocaPtr);
                         }
                     }
-                }
-                else
-                {
-                    // [全局数组]
-                    std::vector<std::string> initStrs; 
-                    bool hasInit = (def->ASSIGN() && def->initVal());
-
-                    if (hasInit)
-                    {
-                        int idx = 0;
-                        std::function<void(SysYParser::InitValContext *, int &, int)> globalHelper;
-
-                        globalHelper = [&](SysYParser::InitValContext *v, int &currentIdx, int dimLevel)
-                        {
-                            if (v->exp())
-                            {
-                                if (currentIdx < totalSize)
-                                {
-                                    if (declType->isFloatTy()) {
-                                        float val = evalFloatConstExp(v->exp());
-                                        initStrs.push_back("float " + ConstantFloat::get(val)->to_string());
-                                    } else {
-                                        int val = evalConstExp(v->exp());
-                                        initStrs.push_back("i32 " + std::to_string(val));
-                                    }
-                                    currentIdx++;
-                                }
-                            }
-                            else if (v->L_BRACE())
-                            {
-                                int startPos = currentIdx;
-                                for (auto child : v->initVal())
-                                {
-                                    globalHelper(child, currentIdx, dimLevel + 1);
-                                }
-                                int blockSize = getDimSize(dims, dimLevel);
-                                while (currentIdx < startPos + blockSize && currentIdx < totalSize)
-                                {
-                                    if (declType->isFloatTy()) initStrs.push_back("float " + ConstantFloat::get(0.0f)->to_string());
-                                    else initStrs.push_back("i32 0");
-                                    currentIdx++;
-                                }
-                            }
-                        };
-
-                        globalHelper(def->initVal(), idx, 0);
-
-                        while(initStrs.size() < totalSize) {
-                            if (declType->isFloatTy()) initStrs.push_back("float " + ConstantFloat::get(0.0f)->to_string());
-                            else initStrs.push_back("i32 0");
-                        }
-                    }
-
-                    std::stringstream ss;
-                    ss << "@" << name << " = dso_local global " << arrType->toString() << " ";
-                    if (hasInit)
-                    {
-                        ss << "[";
-                        for (size_t i = 0; i < initStrs.size(); ++i)
-                        {
-                            ss << initStrs[i];
-                            if (i < initStrs.size() - 1)
-                                ss << ", ";
-                        }
-                        ss << "]";
-                    }
-                    else
-                    {
-                        ss << "zeroinitializer";
-                    }
-                    ss << ", align 16";
-                    module->globalLines.push_back(ss.str());
-
-                    ValuePtr ptr = new Value(Type::getPointerTy(arrType), "@" + name);
-                    symbolTable.addSymbol(name, declType, ptr, false, 0, 0.0f, true, dims);
                 }
                 continue;
             }
 
-            // === 标量处理 ===
+            // 2. Scalar or Array
+            std::vector<int> dims;
+            bool isArray = !def->L_BRACK().empty();
+            Type *fullType = baseType;
+            int totalElemCount = 1;
+
+            if (isArray)
+            {
+                for (auto d : def->constExp())
+                {
+                    int sz = evalConstExp(d->exp());
+                    dims.push_back(sz);
+                    totalElemCount *= sz;
+                }
+                for (auto it = dims.rbegin(); it != dims.rend(); ++it)
+                {
+                    fullType = Type::getArrayTy(fullType, *it);
+                }
+            }
+
             if (currentFunction)
             {
-                ValuePtr ptr = createEntryBlockAlloca(declType);
-                if (def->ASSIGN() && def->initVal() && def->initVal()->exp())
+                // Local Variable
+                ValuePtr ptr = createEntryBlockAlloca(fullType, name);
+                symbolTable.addSymbol(name, fullType, ptr, false, 0, 0.0f, isArray, dims);
+
+                if (def->ASSIGN() && def->initVal())
                 {
-                    ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
-                    initVal = ensureType(initVal, declType);
-                    if (initVal)
+                    if (isArray)
+                    {
+                        // Local Array Initialization
+                        Type *flatPtrTy = Type::getPointerTy(baseType->isFloatTy() ? Type::getFloatTy() : Type::getInt32Ty());
+                        ValuePtr flatPtr = builder.CreateBitCast(ptr, flatPtrTy);
+                        int offset = 0;
+                        processArrayInit(def->initVal(), fullType, offset, flatPtr);
+                    }
+                    else
+                    {
+                        // Scalar Init
+                        ValuePtr initVal = std::any_cast<ValuePtr>(visit(def->initVal()->exp()));
                         builder.CreateStore(initVal, ptr);
+                    }
                 }
-                symbolTable.addSymbol(name, declType, ptr, false);
             }
             else
             {
-                std::string initStr;
-                if (def->ASSIGN() && def->initVal() && def->initVal()->exp())
+                // Global Variable
+                std::stringstream ss;
+                ss << "@" << name << " = dso_local global ";
+
+                if (def->ASSIGN() && def->initVal())
                 {
-                    if (declType->isFloatTy()) {
-                        float val = evalFloatConstExp(def->initVal()->exp());
-                        initStr = ConstantFloat::get(val)->to_string();
-                    } else {
-                        int val = evalConstExp(def->initVal()->exp());
-                        initStr = std::to_string(val);
+                    if (!isArray)
+                    {
+                        ss << fullType->toString() << " ";
+                        if (baseType->isFloatTy())
+                        {
+                            float val = evalFloatConstExp(def->initVal()->exp());
+                            ss << ConstantFloat::get(val)->to_string();
+                        }
+                        else
+                        {
+                            int val = evalConstExp(def->initVal()->exp());
+                            ss << val;
+                        }
+                    }
+                    else
+                    {
+                        // Global Array Init (支持多维花括号初始化，要求元素可编译期求值)
+                        int totalSize = getTypeSize(fullType);
+                        if (baseType->isFloatTy())
+                        {
+                            std::vector<float> initValues(totalSize, 0.0f);
+                            int currentIdx = 0;
+                            flattenGlobalInitVal(initValues, currentIdx, def->initVal(), dims, 0);
+                            int offset = 0;
+                            ss << printGlobalFloatInit(fullType, initValues, offset);
+                        }
+                        else
+                        {
+                            std::vector<int> initValues(totalSize, 0);
+                            int currentIdx = 0;
+                            flattenGlobalInitVal(initValues, currentIdx, def->initVal(), dims, 0);
+                            int offset = 0;
+                            ss << printGlobalConstInit(fullType, initValues, offset);
+                        }
                     }
                 }
                 else
                 {
-                    initStr = declType->isFloatTy() ? "0.0" : "0";
+                    ss << fullType->toString() << " zeroinitializer";
                 }
 
-                std::string ir = "@" + name + " = dso_local global " + declType->toString() + " " + initStr + ", align 4";
-                module->globalLines.push_back(ir);
-                
-                ValuePtr ptr = new Value(Type::getPointerTy(Type::getInt32Ty()), "@" + name);                
-                symbolTable.addSymbol(name, Type::getInt32Ty(), ptr, false, 0);
+                ss << ", align 4";
+                module->globalLines.push_back(ss.str());
+
+                ValuePtr ptr = new Value(Type::getPointerTy(fullType), "@" + name);
+                symbolTable.addSymbol(name, fullType, ptr, false, 0, 0.0f, isArray, dims);
             }
         }
         return nullptr;
@@ -957,10 +1178,11 @@ public:
         {
             // 有返回值的 return
             ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
-            if (currentFunction && val) {
+            if (currentFunction && val)
+            {
                 val = ensureType(val, currentFunction->returnType);
             }
-            
+
             if (val)
                 builder.CreateRet(val);
         }
@@ -983,16 +1205,16 @@ public:
     {
         // [修复] 获取完整文本，无论是 IntConst 还是 FloatConst
         std::string text = ctx->number()->getText();
-        
+
         // 判断是否为浮点数（包含小数点或指数 e/E）
-        if (text.find('.') != std::string::npos || 
-            text.find('e') != std::string::npos || 
-            text.find('E') != std::string::npos) 
+        if (text.find('.') != std::string::npos ||
+            text.find('e') != std::string::npos ||
+            text.find('E') != std::string::npos)
         {
             float val = parseFloat(text);
-            return (ValuePtr) ConstantFloat::get(val);
+            return (ValuePtr)ConstantFloat::get(val);
         }
-        
+
         // 否则当作整数处理
         int val = parseInteger(text);
         return (ValuePtr) new ConstantInt(val);
@@ -1000,7 +1222,7 @@ public:
 
     antlrcpp::Any visitLValExp(SysYParser::LValExpContext *ctx) override
     {
-        std::string name = getTokenText(ctx->lVal()->IDENT());
+        std::string name = getTokenText(ctx->lVal()->IDENT(0));
         SymbolInfo *info = symbolTable.lookup(name);
 
         if (info && info->isConst && !info->isArray)
@@ -1028,45 +1250,51 @@ public:
                     return builder.CreateLoad(ptr);
                 }
 
-                // 情况 2: 普通数组 (int a[10])
-                // ptr 是 [10 x i32]* (数组首地址)
-                // 使用 GEP 获取 &a[0] (i32*)
-                if (!info->isPointer && ctx->lVal()->L_BRACK().empty())
+                // 情况 2: 普通数组 (int a[10] 或 int b[5][10])
+                // ptr 指向当前维度的数组 (e.g. [10 x i32]*)
+                // 我们需要将其退化为首元素指针 (e.g. i32*)
+                if (!info->isPointer)
                 {
-                    int totalSize = 1;
-                    for (int d : info->dims)
-                        totalSize *= d;
-                    return builder.CreateGEP(ptr, new ConstantInt(0), totalSize);
+                    // 使用 GEP 获取 &arr[0]
+                    return builder.CreateGEP(ptr, new ConstantInt(0), 0);
                 }
-                
+
                 return ptr;
             }
         }
-        
+
         // 普通变量或解引用：读取值
         return builder.CreateLoad(ptr);
     }
 
-    antlrcpp::Any visitAddSubExp(SysYParser::AddSubExpContext *ctx) override {
+    antlrcpp::Any visitAddSubExp(SysYParser::AddSubExpContext *ctx) override
+    {
         auto lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
         auto rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
-        
+
         // 检查是否涉及浮点数
         bool isFloat = lhs->getType()->isFloatTy() || rhs->getType()->isFloatTy();
-        
-        if (isFloat) {
+
+        if (isFloat)
+        {
             // 只要有一方是 float，两边都转 float
             lhs = ensureType(lhs, Type::getFloatTy());
             rhs = ensureType(rhs, Type::getFloatTy());
 
             // 生成 fadd / fsub
-            if (ctx->PLUS()) return builder.CreateFAdd(lhs, rhs);
-            else return builder.CreateFSub(lhs, rhs);
-        } else {
+            if (ctx->PLUS())
+                return builder.CreateFAdd(lhs, rhs);
+            else
+                return builder.CreateFSub(lhs, rhs);
+        }
+        else
+        {
             // 纯整数情况 (保持原有常数折叠逻辑或直接生成指令)
             // 简单起见直接生成指令，优化交给 LLVM 后端或你的 ConstantInt 检查
-            if (ctx->PLUS()) return builder.CreateAdd(lhs, rhs);
-            else return builder.CreateSub(lhs, rhs);
+            if (ctx->PLUS())
+                return builder.CreateAdd(lhs, rhs);
+            else
+                return builder.CreateSub(lhs, rhs);
         }
     }
 
@@ -1074,18 +1302,23 @@ public:
     {
         ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
         ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
-        if (!lhs || !rhs){return (ValuePtr) nullptr;}
-        
+        if (!lhs || !rhs)
+        {
+            return (ValuePtr) nullptr;
+        }
+
         bool isFloat = lhs->getType()->isFloatTy() || rhs->getType()->isFloatTy();
-        if (isFloat) {
+        if (isFloat)
+        {
             lhs = ensureType(lhs, Type::getFloatTy());
             rhs = ensureType(rhs, Type::getFloatTy());
 
-            if (ctx->MOD()) {
+            if (ctx->MOD())
+            {
                 // SysY 语言规范通常不支持浮点取模。
                 // 如果需要支持，LLVM 指令是 "frem"
                 std::cerr << "Error: Modulo operator on floating point numbers is invalid." << std::endl;
-                return (ValuePtr)nullptr; 
+                return (ValuePtr) nullptr;
             }
 
             std::string op = ctx->MUL() ? "fmul" : "fdiv";
@@ -1120,7 +1353,7 @@ public:
         {
             // 语法检查：& 后面必须是左值 (例如 &a, &arr[0])
             // 虽然 parser 允许 &exp，但在语义上只能是 &lVal
-            if (auto lValExp = dynamic_cast<SysYParser::LValExpContext*>(ctx->exp()))
+            if (auto lValExp = dynamic_cast<SysYParser::LValExpContext *>(ctx->exp()))
             {
                 // 获取左值的地址，不进行 load
                 return getLValPointer(lValExp->lVal());
@@ -1128,34 +1361,44 @@ public:
             else
             {
                 std::cerr << "Error: operand of '&' must be an l-value" << std::endl;
-                return (ValuePtr)nullptr;
+                return (ValuePtr) nullptr;
             }
         }
         if (ctx->PLUS())
             return visit(ctx->exp());
-            
+
         ValuePtr val = std::any_cast<ValuePtr>(visit(ctx->exp()));
-        if (!val) return (ValuePtr) nullptr;
+        if (!val)
+            return (ValuePtr) nullptr;
 
         // 1. 常量折叠优化 (增加 Float 支持)
-        if (auto cInt = dynamic_cast<ConstantInt *>(val)) {
-             if (ctx->MINUS()) return (ValuePtr) new ConstantInt(-cInt->value);
-             if (ctx->NOT()) return (ValuePtr) new ConstantInt(!cInt->value);
+        if (auto cInt = dynamic_cast<ConstantInt *>(val))
+        {
+            if (ctx->MINUS())
+                return (ValuePtr) new ConstantInt(-cInt->value);
+            if (ctx->NOT())
+                return (ValuePtr) new ConstantInt(!cInt->value);
         }
-        if (auto cFloat = dynamic_cast<ConstantFloat *>(val)) {
-             if (ctx->MINUS()) return (ValuePtr) ConstantFloat::get(-cFloat->value);
-             // !float 通常语义为 val == 0.0
-             if (ctx->NOT()) return (ValuePtr) new ConstantInt(cFloat->value == 0.0f); 
+        if (auto cFloat = dynamic_cast<ConstantFloat *>(val))
+        {
+            if (ctx->MINUS())
+                return (ValuePtr)ConstantFloat::get(-cFloat->value);
+            // !float 通常语义为 val == 0.0
+            if (ctx->NOT())
+                return (ValuePtr) new ConstantInt(cFloat->value == 0.0f);
         }
 
         // 2. 指令生成
         if (ctx->MINUS())
         {
             // [修复] 根据类型生成 fsub 或 sub
-            if (val->getType()->isFloatTy()) {
+            if (val->getType()->isFloatTy())
+            {
                 ValuePtr zero = ConstantFloat::get(0.0f);
                 return builder.CreateBinary("fsub", zero, val);
-            } else {
+            }
+            else
+            {
                 ValuePtr zero = new ConstantInt(0);
                 return builder.CreateBinary("sub", zero, val);
             }
@@ -1163,15 +1406,16 @@ public:
         if (ctx->NOT())
         {
             // [修复] 根据类型生成 fcmp 或 icmp
-            ValuePtr zero = val->getType()->isFloatTy() ? 
-                            (ValuePtr)ConstantFloat::get(0.0f) : 
-                            (ValuePtr)new ConstantInt(0);
-            
+            ValuePtr zero = val->getType()->isFloatTy() ? (ValuePtr)ConstantFloat::get(0.0f) : (ValuePtr) new ConstantInt(0);
+
             ValuePtr cmp;
-            if (val->getType()->isFloatTy()) {
+            if (val->getType()->isFloatTy())
+            {
                 // 浮点数判 0 使用 fcmp oeq (Ordered Equal)
                 cmp = builder.CreateFCmp("oeq", val, zero);
-            } else {
+            }
+            else
+            {
                 cmp = builder.CreateICmp("eq", val, zero);
             }
             return builder.CreateZExt(cmp);
@@ -1179,30 +1423,42 @@ public:
         return val;
     }
 
-    antlrcpp::Any visitRelExp(SysYParser::RelExpContext *ctx) override {
+    antlrcpp::Any visitRelExp(SysYParser::RelExpContext *ctx) override
+    {
         auto lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
         auto rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
 
         bool isFloat = lhs->getType()->isFloatTy() || rhs->getType()->isFloatTy();
         ValuePtr cmpRes;
 
-        if (isFloat) {
+        if (isFloat)
+        {
             lhs = ensureType(lhs, Type::getFloatTy());
             rhs = ensureType(rhs, Type::getFloatTy());
 
             std::string op;
-            if (ctx->LT()) op = "olt";      // Ordered Less Than
-            else if (ctx->GT()) op = "ogt"; // Ordered Greater Than
-            else if (ctx->LE()) op = "ole";
-            else if (ctx->GE()) op = "oge";
+            if (ctx->LT())
+                op = "olt"; // Ordered Less Than
+            else if (ctx->GT())
+                op = "ogt"; // Ordered Greater Than
+            else if (ctx->LE())
+                op = "ole";
+            else if (ctx->GE())
+                op = "oge";
 
             cmpRes = builder.CreateFCmp(op, lhs, rhs);
-        } else {
+        }
+        else
+        {
             std::string op;
-            if (ctx->LT()) op = "slt";
-            else if (ctx->GT()) op = "sgt";
-            else if (ctx->LE()) op = "sle";
-            else if (ctx->GE()) op = "sge";
+            if (ctx->LT())
+                op = "slt";
+            else if (ctx->GT())
+                op = "sgt";
+            else if (ctx->LE())
+                op = "sle";
+            else if (ctx->GE())
+                op = "sge";
 
             cmpRes = builder.CreateICmp(op, lhs, rhs);
         }
@@ -1215,13 +1471,15 @@ public:
     {
         ValuePtr lhs = std::any_cast<ValuePtr>(visit(ctx->exp(0)));
         ValuePtr rhs = std::any_cast<ValuePtr>(visit(ctx->exp(1)));
-        if (!lhs || !rhs) return (ValuePtr)nullptr;
+        if (!lhs || !rhs)
+            return (ValuePtr) nullptr;
 
         // [修复] 检查是否涉及浮点数
         bool isFloat = lhs->getType()->isFloatTy() || rhs->getType()->isFloatTy();
         ValuePtr cmp;
 
-        if (isFloat) {
+        if (isFloat)
+        {
             // 1. 类型统一转为 float
             lhs = ensureType(lhs, Type::getFloatTy());
             rhs = ensureType(rhs, Type::getFloatTy());
@@ -1230,10 +1488,12 @@ public:
             // == 使用 oeq (Ordered and Equal)
             // != 使用 une (Unordered or Not Equal) - 这样处理 NaN 比较更符合直觉
             std::string op = ctx->EQ() ? "oeq" : "une";
-            
+
             // 3. 生成 fcmp 指令
             cmp = builder.CreateFCmp(op, lhs, rhs);
-        } else {
+        }
+        else
+        {
             // 整数情况保持不变
             std::string op = ctx->EQ() ? "eq" : "ne";
             cmp = builder.CreateICmp(op, lhs, rhs);
@@ -1262,32 +1522,78 @@ public:
             }
         }
 
-        // --- 修复开始：针对 SysY 运行时库函数的参数类型检查 ---
-        // 这里的逻辑对应之前的建议：由于没有函数符号表，手动修正已知库函数的参数类型
-        if (funcName == "putfloat" && args.size() == 1) {
-            // 确保 putfloat(float) 接收的是 float
-            args[0] = ensureType(args[0], Type::getFloatTy());
+        // Fix for Array Decay in Function Calls (e.g. passing array to getarray or user function)
+        // Check user functions
+        Function *callee = nullptr;
+        for (const auto &f : module->funcList)
+        {
+            // f->name stores "@name"
+            if (f->name == "@" + funcName)
+            {
+                callee = f.get();
+                break;
+            }
         }
-        else if ((funcName == "putint" || funcName == "putch") && args.size() == 1) {
-            // 确保 putint(int) 和 putch(int) 接收的是 int
-            args[0] = ensureType(args[0], Type::getInt32Ty());
-        }
-        // 注意：对于自定义函数，理想做法是在 SymbolTable 中记录函数签名(ArgTypes)，
-        // 然后在这里查表并循环调用 ensureType。目前的硬编码仅适用于标准库。
-        // --- 修复结束 ---
 
-        Type* retType = Type::getInt32Ty(); // 默认 i32
-        if (funcRetTypes.find(funcName) != funcRetTypes.end()) {
+        auto decayArray = [&](int idx, Type *targetElemTy)
+        {
+            if (idx < args.size())
+            {
+                Type *argTy = args[idx]->getType();
+                if (argTy->isPointerTy() && argTy->elementType->isArrayTy())
+                {
+                    // Check if decaying gives target type (simplistic)
+                    std::vector<ValuePtr> idxs = {ConstantInt::get(0), ConstantInt::get(0)};
+                    args[idx] = builder.CreateInBoundsGEP(args[idx], idxs, argTy->elementType->elementType);
+                }
+            }
+        };
+
+        if (callee)
+        {
+            for (size_t i = 0; i < args.size() && i < callee->argTypes.size(); ++i)
+            {
+                Type *paramTy = callee->argTypes[i];
+                if (paramTy->isPointerTy() && !paramTy->elementType->isArrayTy())
+                {
+                    // Expected i32*, got [N x i32]* -> Decay
+                    decayArray(i, paramTy->elementType);
+                }
+                args[i] = ensureType(args[i], paramTy);
+            }
+        }
+        else
+        {
+            // Library functions
+            if (funcName == "getarray" || funcName == "getfarray")
+            {
+                decayArray(0, nullptr);
+            }
+            if (funcName == "putarray" || funcName == "putfarray")
+            {
+                decayArray(1, nullptr);
+            }
+            // putfloat/putint logic...
+            if (funcName == "putfloat" && args.size() == 1)
+            {
+                args[0] = ensureType(args[0], Type::getFloatTy());
+            }
+            else if ((funcName == "putint" || funcName == "putch") && args.size() == 1)
+            {
+                args[0] = ensureType(args[0], Type::getInt32Ty());
+            }
+        }
+
+        Type *retType = Type::getInt32Ty();
+        if (funcRetTypes.find(funcName) != funcRetTypes.end())
+        {
             retType = funcRetTypes[funcName];
-        } else {
-            // 如果未找到（比如递归调用时未前向声明？SysY通常按顺序定义），
-            // 或者假设是外部 int 函数。
-            // 对于递归，visitFuncDef 开头已经注册了，所以通常能找到。
-            std::cerr << "Warning: Calling undefined function " << funcName << ", assuming i32 return." << std::endl;
+        }
+        else
+        {
+            // Assume i32 for external
         }
 
-        // 判断是否为 SysY 库中的 void 函数
-        bool isVoid = (voidFuncs.find(funcName) != voidFuncs.end());
         return builder.CreateCall(funcName, args, retType);
     }
     // 修复逻辑与表达式（&&）
@@ -1464,8 +1770,21 @@ public:
             return nullptr;
 
         // 将条件转换为布尔值
-        ValuePtr zero = new ConstantInt(0);
-        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        ValuePtr condBool;
+        if (cond->getType()->isInt1Ty())
+        {
+            condBool = cond;
+        }
+        else if (cond->getType()->isFloatTy())
+        {
+            ValuePtr zero = ConstantFloat::get(0.0f);
+            condBool = builder.CreateFCmp("une", cond, zero);
+        }
+        else
+        {
+            ValuePtr zero = new ConstantInt(0);
+            condBool = builder.CreateICmp("ne", cond, zero);
+        }
 
         // 创建基本块
         BasicBlock *thenBB = new BasicBlock("if.then" + std::to_string(currentIf));
@@ -1542,8 +1861,21 @@ public:
         if (!cond)
             return nullptr;
 
-        ValuePtr zero = new ConstantInt(0);
-        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        ValuePtr condBool;
+        if (cond->getType()->isInt1Ty())
+        {
+            condBool = cond;
+        }
+        else if (cond->getType()->isFloatTy())
+        {
+            ValuePtr zero = ConstantFloat::get(0.0f);
+            condBool = builder.CreateFCmp("une", cond, zero);
+        }
+        else
+        {
+            ValuePtr zero = new ConstantInt(0);
+            condBool = builder.CreateICmp("ne", cond, zero);
+        }
         builder.CreateCondBr(condBool, bodyBB, mergeBB);
 
         // 循环体
@@ -1605,8 +1937,21 @@ public:
             ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->condition));
             if (cond)
             {
-                ValuePtr zero = new ConstantInt(0);
-                ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+                ValuePtr condBool;
+                if (cond->getType()->isInt1Ty())
+                {
+                    condBool = cond;
+                }
+                else if (cond->getType()->isFloatTy())
+                {
+                    ValuePtr zero = ConstantFloat::get(0.0f);
+                    condBool = builder.CreateFCmp("une", cond, zero);
+                }
+                else
+                {
+                    ValuePtr zero = new ConstantInt(0);
+                    condBool = builder.CreateICmp("ne", cond, zero);
+                }
                 builder.CreateCondBr(condBool, bodyBB, mergeBB);
             }
         }
