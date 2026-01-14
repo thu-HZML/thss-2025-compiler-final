@@ -16,110 +16,110 @@ declare void @stoptime()
 
 define i32 @inc_a() {
 entry0:
-  %0 = alloca i32, align 4
-  %1 = load i32, i32* @a, align 4
-  store i32 %1, i32* %0, align 4
-  %2 = load i32, i32* %0, align 4
-  %3 = add i32 %2, 1
-  store i32 %3, i32* %0, align 4
-  %4 = load i32, i32* %0, align 4
-  store i32 %4, i32* @a, align 4
-  %5 = load i32, i32* @a, align 4
-  ret i32 %5
+  %alloc_0 = alloca i32, align 4
+  %0 = load i32, i32* @a, align 4
+  store i32 %0, i32* %alloc_0, align 4
+  %1 = load i32, i32* %alloc_0, align 4
+  %2 = add i32 %1, 1
+  store i32 %2, i32* %alloc_0, align 4
+  %3 = load i32, i32* %alloc_0, align 4
+  store i32 %3, i32* @a, align 4
+  %4 = load i32, i32* @a, align 4
+  ret i32 %4
 }
 
 define i32 @main() {
 entry1:
-  %0 = alloca i32, align 4
-  store i32 5, i32* %0, align 4
+  %alloc_1 = alloca i32, align 4
+  store i32 5, i32* %alloc_1, align 4
   br label %while.cond.0
 while.cond.0:
-  %1 = load i32, i32* %0, align 4
-  %2 = icmp sge i32 %1, 0
-  %3 = zext i1 %2 to i32
-  %4 = icmp ne i32 %3, 0
-  br i1 %4, label %while.body.0, label %while.merge.0
+  %0 = load i32, i32* %alloc_1, align 4
+  %1 = icmp sge i32 %0, 0
+  %2 = zext i1 %1 to i32
+  %3 = icmp ne i32 %2, 0
+  br i1 %3, label %while.body.0, label %while.merge.0
 while.body.0:
-  %5 = call i32 @inc_a()
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %land.rhs2, label %land.merge3
+  %4 = call i32 @inc_a()
+  %5 = icmp ne i32 %4, 0
+  br i1 %5, label %land.rhs2, label %land.merge3
 land.rhs2:
-  %7 = call i32 @inc_a()
-  %8 = icmp ne i32 %7, 0
-  %9 = zext i1 %8 to i32
+  %6 = call i32 @inc_a()
+  %7 = icmp ne i32 %6, 0
+  %8 = zext i1 %7 to i32
   br label %land.merge3
 land.merge3:
-  %10 = phi i32 [0, %while.body.0], [%9, %land.rhs2]
-  %11 = icmp ne i32 %10, 0
-  br i1 %11, label %land.rhs4, label %land.merge5
+  %9 = phi i32 [0, %while.body.0], [%8, %land.rhs2]
+  %10 = icmp ne i32 %9, 0
+  br i1 %10, label %land.rhs4, label %land.merge5
 land.rhs4:
-  %12 = call i32 @inc_a()
-  %13 = icmp ne i32 %12, 0
-  %14 = zext i1 %13 to i32
+  %11 = call i32 @inc_a()
+  %12 = icmp ne i32 %11, 0
+  %13 = zext i1 %12 to i32
   br label %land.merge5
 land.merge5:
-  %15 = phi i32 [0, %land.merge3], [%14, %land.rhs4]
-  %16 = icmp ne i32 %15, 0
-  br i1 %16, label %if.then0, label %if.merge0
+  %14 = phi i32 [0, %land.merge3], [%13, %land.rhs4]
+  %15 = icmp ne i32 %14, 0
+  br i1 %15, label %if.then0, label %if.merge0
 if.then0:
-  %17 = load i32, i32* @a, align 4
-  call void @putint(i32 %17)
+  %16 = load i32, i32* @a, align 4
+  call void @putint(i32 %16)
   call void @putch(i32 32)
-  %18 = load i32, i32* @b, align 4
-  call void @putint(i32 %18)
+  %17 = load i32, i32* @b, align 4
+  call void @putint(i32 %17)
   call void @putch(i32 10)
   br label %if.merge0
 if.merge0:
-  %19 = call i32 @inc_a()
-  %20 = icmp slt i32 %19, 14
-  %21 = zext i1 %20 to i32
-  %22 = icmp ne i32 %21, 0
-  br i1 %22, label %lor.merge7, label %lor.rhs6
+  %18 = call i32 @inc_a()
+  %19 = icmp slt i32 %18, 14
+  %20 = zext i1 %19 to i32
+  %21 = icmp ne i32 %20, 0
+  br i1 %21, label %lor.merge7, label %lor.rhs6
 lor.rhs6:
-  %23 = call i32 @inc_a()
-  %24 = icmp ne i32 %23, 0
-  br i1 %24, label %land.rhs8, label %land.merge9
+  %22 = call i32 @inc_a()
+  %23 = icmp ne i32 %22, 0
+  br i1 %23, label %land.rhs8, label %land.merge9
 land.rhs8:
+  %24 = call i32 @inc_a()
   %25 = call i32 @inc_a()
-  %26 = call i32 @inc_a()
-  %27 = sub i32 %25, %26
-  %28 = add i32 %27, 1
-  %29 = icmp ne i32 %28, 0
-  %30 = zext i1 %29 to i32
+  %26 = sub i32 %24, %25
+  %27 = add i32 %26, 1
+  %28 = icmp ne i32 %27, 0
+  %29 = zext i1 %28 to i32
   br label %land.merge9
 land.merge9:
-  %31 = phi i32 [0, %lor.rhs6], [%30, %land.rhs8]
-  %32 = icmp ne i32 %31, 0
-  %33 = zext i1 %32 to i32
+  %30 = phi i32 [0, %lor.rhs6], [%29, %land.rhs8]
+  %31 = icmp ne i32 %30, 0
+  %32 = zext i1 %31 to i32
   br label %lor.merge7
 lor.merge7:
-  %34 = phi i32 [1, %if.merge0], [%33, %land.merge9]
-  %35 = icmp ne i32 %34, 0
-  br i1 %35, label %if.then1, label %if.else1
+  %33 = phi i32 [1, %if.merge0], [%32, %land.merge9]
+  %34 = icmp ne i32 %33, 0
+  br i1 %34, label %if.then1, label %if.else1
 if.then1:
-  %36 = load i32, i32* @a, align 4
-  call void @putint(i32 %36)
+  %35 = load i32, i32* @a, align 4
+  call void @putint(i32 %35)
   call void @putch(i32 10)
-  %37 = load i32, i32* @b, align 4
-  %38 = mul i32 %37, 2
-  store i32 %38, i32* @b, align 4
+  %36 = load i32, i32* @b, align 4
+  %37 = mul i32 %36, 2
+  store i32 %37, i32* @b, align 4
   br label %if.merge1
 if.else1:
-  %39 = call i32 @inc_a()
+  %38 = call i32 @inc_a()
   br label %if.merge1
 if.merge1:
-  %40 = load i32, i32* %0, align 4
-  %41 = sub i32 %40, 1
-  store i32 %41, i32* %0, align 4
+  %39 = load i32, i32* %alloc_1, align 4
+  %40 = sub i32 %39, 1
+  store i32 %40, i32* %alloc_1, align 4
   br label %while.cond.0
 while.merge.0:
-  %42 = load i32, i32* @a, align 4
-  call void @putint(i32 %42)
+  %41 = load i32, i32* @a, align 4
+  call void @putint(i32 %41)
   call void @putch(i32 32)
-  %43 = load i32, i32* @b, align 4
-  call void @putint(i32 %43)
+  %42 = load i32, i32* @b, align 4
+  call void @putint(i32 %42)
   call void @putch(i32 10)
-  %44 = load i32, i32* @a, align 4
-  ret i32 %44
+  %43 = load i32, i32* @a, align 4
+  ret i32 %43
 }
 

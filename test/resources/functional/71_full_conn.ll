@@ -1571,58 +1571,58 @@ if.merge2:
 
 define i32 @main() {
 entry2:
-  %0 = alloca i32, align 4
-  %1 = call i32 @getint()
-  store i32 %1, i32* %0, align 4
-  %2 = alloca [5 x [5 x i32]], align 4
+  %alloc_3 = alloca i32, align 4
+  %alloc_2 = alloca i32, align 4
+  %alloc_1 = alloca [5 x [5 x i32]], align 4
+  %alloc_0 = alloca i32, align 4
+  %0 = call i32 @getint()
+  store i32 %0, i32* %alloc_0, align 4
   br label %while.cond.0
 while.cond.0:
-  %3 = load i32, i32* %0, align 4
-  %4 = icmp sgt i32 %3, 0
-  %5 = zext i1 %4 to i32
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %while.body.0, label %while.merge.0
+  %1 = load i32, i32* %alloc_0, align 4
+  %2 = icmp sgt i32 %1, 0
+  %3 = zext i1 %2 to i32
+  %4 = icmp ne i32 %3, 0
+  br i1 %4, label %while.body.0, label %while.merge.0
 while.body.0:
-  %7 = alloca i32, align 4
-  store i32 0, i32* %7, align 4
+  store i32 0, i32* %alloc_2, align 4
   br label %while.cond.1
 while.cond.1:
-  %8 = load i32, i32* %7, align 4
-  %9 = icmp slt i32 %8, 5
-  %10 = zext i1 %9 to i32
-  %11 = icmp ne i32 %10, 0
-  br i1 %11, label %while.body.1, label %while.merge.1
+  %5 = load i32, i32* %alloc_2, align 4
+  %6 = icmp slt i32 %5, 5
+  %7 = zext i1 %6 to i32
+  %8 = icmp ne i32 %7, 0
+  br i1 %8, label %while.body.1, label %while.merge.1
 while.body.1:
-  %12 = alloca i32, align 4
-  store i32 0, i32* %12, align 4
+  store i32 0, i32* %alloc_3, align 4
   br label %while.cond.2
 while.cond.2:
-  %13 = load i32, i32* %12, align 4
-  %14 = icmp slt i32 %13, 5
-  %15 = zext i1 %14 to i32
-  %16 = icmp ne i32 %15, 0
-  br i1 %16, label %while.body.2, label %while.merge.2
+  %9 = load i32, i32* %alloc_3, align 4
+  %10 = icmp slt i32 %9, 5
+  %11 = zext i1 %10 to i32
+  %12 = icmp ne i32 %11, 0
+  br i1 %12, label %while.body.2, label %while.merge.2
 while.body.2:
-  %17 = load i32, i32* %7, align 4
-  %18 = getelementptr inbounds [5 x [5 x i32]], [5 x [5 x i32]]* %2, i32 0, i32 %17
-  %19 = load i32, i32* %12, align 4
-  %20 = getelementptr inbounds [5 x i32], [5 x i32]* %18, i32 0, i32 %19
-  %21 = call i32 @getint()
-  store i32 %21, i32* %20, align 4
-  %22 = load i32, i32* %12, align 4
-  %23 = add i32 %22, 1
-  store i32 %23, i32* %12, align 4
+  %13 = load i32, i32* %alloc_2, align 4
+  %14 = getelementptr inbounds [5 x [5 x i32]], [5 x [5 x i32]]* %alloc_1, i32 0, i32 %13
+  %15 = load i32, i32* %alloc_3, align 4
+  %16 = getelementptr inbounds [5 x i32], [5 x i32]* %14, i32 0, i32 %15
+  %17 = call i32 @getint()
+  store i32 %17, i32* %16, align 4
+  %18 = load i32, i32* %alloc_3, align 4
+  %19 = add i32 %18, 1
+  store i32 %19, i32* %alloc_3, align 4
   br label %while.cond.2
 while.merge.2:
-  %24 = load i32, i32* %7, align 4
-  %25 = add i32 %24, 1
-  store i32 %25, i32* %7, align 4
+  %20 = load i32, i32* %alloc_2, align 4
+  %21 = add i32 %20, 1
+  store i32 %21, i32* %alloc_2, align 4
   br label %while.cond.1
 while.merge.1:
-  %26 = getelementptr inbounds [5 x [5 x i32]], [5 x [5 x i32]]* %2, i32 0, i32 0
-  %27 = call i32 @model([5 x i32]* %26)
-  %28 = icmp ne i32 %27, 0
-  br i1 %28, label %if.then3, label %if.else3
+  %22 = getelementptr inbounds [5 x [5 x i32]], [5 x [5 x i32]]* %alloc_1, i32 0, i32 0
+  %23 = call i32 @model([5 x i32]* %22)
+  %24 = icmp ne i32 %23, 0
+  br i1 %24, label %if.then3, label %if.else3
 if.then3:
   call void @putch(i32 99)
   call void @putch(i32 97)
@@ -1636,9 +1636,9 @@ if.else3:
   call void @putch(i32 10)
   br label %if.merge3
 if.merge3:
-  %29 = load i32, i32* %0, align 4
-  %30 = sub i32 %29, 1
-  store i32 %30, i32* %0, align 4
+  %25 = load i32, i32* %alloc_0, align 4
+  %26 = sub i32 %25, 1
+  store i32 %26, i32* %alloc_0, align 4
   br label %while.cond.0
 while.merge.0:
   ret i32 0

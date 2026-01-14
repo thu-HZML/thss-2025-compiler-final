@@ -14,9 +14,9 @@ declare void @stoptime()
 
 define i32 @main() {
 entry0:
-  %0 = alloca i32, align 4
-  store i32 15, i32* %0, align 4
-  %1 = load i32, i32* %0, align 4
-  ret i32 %1
+  %alloc_0 = alloca i32, align 4
+  store i32 15, i32* %alloc_0, align 4
+  %0 = load i32, i32* %alloc_0, align 4
+  ret i32 %0
 }
 

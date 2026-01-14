@@ -47,6 +47,11 @@ entry2:
 
 define i32 @main() {
 entry3:
+  %alloc_5 = alloca i32, align 4
+  %alloc_4 = alloca i32, align 4
+  %alloc_3 = alloca i32, align 4
+  %alloc_2 = alloca i32, align 4
+  %alloc_1 = alloca i32, align 4
   %alloc_0 = alloca i32, align 4
   store i32 2, i32* @a, align 4
   store i32 3, i32* @b, align 4
@@ -194,162 +199,157 @@ if.then9:
   br label %if.merge9
 if.merge9:
   call void @putch(i32 10)
-  %65 = alloca i32, align 4
-  store i32 0, i32* %65, align 4
-  %66 = alloca i32, align 4
-  store i32 1, i32* %66, align 4
-  %67 = alloca i32, align 4
-  store i32 2, i32* %67, align 4
-  %68 = alloca i32, align 4
-  store i32 3, i32* %68, align 4
-  %69 = alloca i32, align 4
-  store i32 4, i32* %69, align 4
+  store i32 0, i32* %alloc_1, align 4
+  store i32 1, i32* %alloc_2, align 4
+  store i32 2, i32* %alloc_3, align 4
+  store i32 3, i32* %alloc_4, align 4
+  store i32 4, i32* %alloc_5, align 4
   br label %while.cond.0
 while.cond.0:
-  %70 = load i32, i32* %65, align 4
-  %71 = icmp ne i32 %70, 0
-  br i1 %71, label %land.rhs12, label %land.merge13
+  %65 = load i32, i32* %alloc_1, align 4
+  %66 = icmp ne i32 %65, 0
+  br i1 %66, label %land.rhs12, label %land.merge13
 land.rhs12:
-  %72 = load i32, i32* %66, align 4
-  %73 = icmp ne i32 %72, 0
-  %74 = zext i1 %73 to i32
+  %67 = load i32, i32* %alloc_2, align 4
+  %68 = icmp ne i32 %67, 0
+  %69 = zext i1 %68 to i32
   br label %land.merge13
 land.merge13:
-  %75 = phi i32 [0, %while.cond.0], [%74, %land.rhs12]
-  %76 = icmp ne i32 %75, 0
-  br i1 %76, label %while.body.0, label %while.merge.0
+  %70 = phi i32 [0, %while.cond.0], [%69, %land.rhs12]
+  %71 = icmp ne i32 %70, 0
+  br i1 %71, label %while.body.0, label %while.merge.0
 while.body.0:
   call void @putch(i32 32)
   br label %while.cond.0
 while.merge.0:
-  %77 = load i32, i32* %65, align 4
-  %78 = icmp ne i32 %77, 0
-  br i1 %78, label %lor.merge15, label %lor.rhs14
+  %72 = load i32, i32* %alloc_1, align 4
+  %73 = icmp ne i32 %72, 0
+  br i1 %73, label %lor.merge15, label %lor.rhs14
 lor.rhs14:
-  %79 = load i32, i32* %66, align 4
-  %80 = icmp ne i32 %79, 0
-  %81 = zext i1 %80 to i32
+  %74 = load i32, i32* %alloc_2, align 4
+  %75 = icmp ne i32 %74, 0
+  %76 = zext i1 %75 to i32
   br label %lor.merge15
 lor.merge15:
-  %82 = phi i32 [1, %while.merge.0], [%81, %lor.rhs14]
-  %83 = icmp ne i32 %82, 0
-  br i1 %83, label %if.then10, label %if.merge10
+  %77 = phi i32 [1, %while.merge.0], [%76, %lor.rhs14]
+  %78 = icmp ne i32 %77, 0
+  br i1 %78, label %if.then10, label %if.merge10
 if.then10:
   call void @putch(i32 67)
   br label %if.merge10
 if.merge10:
-  %84 = load i32, i32* %65, align 4
-  %85 = load i32, i32* %66, align 4
-  %86 = icmp sge i32 %84, %85
+  %79 = load i32, i32* %alloc_1, align 4
+  %80 = load i32, i32* %alloc_2, align 4
+  %81 = icmp sge i32 %79, %80
+  %82 = zext i1 %81 to i32
+  %83 = icmp ne i32 %82, 0
+  br i1 %83, label %lor.merge17, label %lor.rhs16
+lor.rhs16:
+  %84 = load i32, i32* %alloc_2, align 4
+  %85 = load i32, i32* %alloc_1, align 4
+  %86 = icmp sle i32 %84, %85
   %87 = zext i1 %86 to i32
   %88 = icmp ne i32 %87, 0
-  br i1 %88, label %lor.merge17, label %lor.rhs16
-lor.rhs16:
-  %89 = load i32, i32* %66, align 4
-  %90 = load i32, i32* %65, align 4
-  %91 = icmp sle i32 %89, %90
-  %92 = zext i1 %91 to i32
-  %93 = icmp ne i32 %92, 0
-  %94 = zext i1 %93 to i32
+  %89 = zext i1 %88 to i32
   br label %lor.merge17
 lor.merge17:
-  %95 = phi i32 [1, %if.merge10], [%94, %lor.rhs16]
-  %96 = icmp ne i32 %95, 0
-  br i1 %96, label %if.then11, label %if.merge11
+  %90 = phi i32 [1, %if.merge10], [%89, %lor.rhs16]
+  %91 = icmp ne i32 %90, 0
+  br i1 %91, label %if.then11, label %if.merge11
 if.then11:
   call void @putch(i32 72)
   br label %if.merge11
 if.merge11:
-  %97 = load i32, i32* %67, align 4
-  %98 = load i32, i32* %66, align 4
-  %99 = icmp sge i32 %97, %98
+  %92 = load i32, i32* %alloc_3, align 4
+  %93 = load i32, i32* %alloc_2, align 4
+  %94 = icmp sge i32 %92, %93
+  %95 = zext i1 %94 to i32
+  %96 = icmp ne i32 %95, 0
+  br i1 %96, label %land.rhs18, label %land.merge19
+land.rhs18:
+  %97 = load i32, i32* %alloc_5, align 4
+  %98 = load i32, i32* %alloc_4, align 4
+  %99 = icmp ne i32 %97, %98
   %100 = zext i1 %99 to i32
   %101 = icmp ne i32 %100, 0
-  br i1 %101, label %land.rhs18, label %land.merge19
-land.rhs18:
-  %102 = load i32, i32* %69, align 4
-  %103 = load i32, i32* %68, align 4
-  %104 = icmp ne i32 %102, %103
-  %105 = zext i1 %104 to i32
-  %106 = icmp ne i32 %105, 0
-  %107 = zext i1 %106 to i32
+  %102 = zext i1 %101 to i32
   br label %land.merge19
 land.merge19:
-  %108 = phi i32 [0, %if.merge11], [%107, %land.rhs18]
-  %109 = icmp ne i32 %108, 0
-  br i1 %109, label %if.then12, label %if.merge12
+  %103 = phi i32 [0, %if.merge11], [%102, %land.rhs18]
+  %104 = icmp ne i32 %103, 0
+  br i1 %104, label %if.then12, label %if.merge12
 if.then12:
   call void @putch(i32 73)
   br label %if.merge12
 if.merge12:
-  %110 = load i32, i32* %65, align 4
-  %111 = load i32, i32* %66, align 4
-  %112 = icmp eq i32 %111, 0
-  %113 = zext i1 %112 to i32
-  %114 = icmp eq i32 %110, %113
+  %105 = load i32, i32* %alloc_1, align 4
+  %106 = load i32, i32* %alloc_2, align 4
+  %107 = icmp eq i32 %106, 0
+  %108 = zext i1 %107 to i32
+  %109 = icmp eq i32 %105, %108
+  %110 = zext i1 %109 to i32
+  %111 = icmp ne i32 %110, 0
+  br i1 %111, label %land.rhs20, label %land.merge21
+land.rhs20:
+  %112 = load i32, i32* %alloc_4, align 4
+  %113 = load i32, i32* %alloc_4, align 4
+  %114 = icmp slt i32 %112, %113
   %115 = zext i1 %114 to i32
   %116 = icmp ne i32 %115, 0
-  br i1 %116, label %land.rhs20, label %land.merge21
-land.rhs20:
-  %117 = load i32, i32* %68, align 4
-  %118 = load i32, i32* %68, align 4
-  %119 = icmp slt i32 %117, %118
-  %120 = zext i1 %119 to i32
-  %121 = icmp ne i32 %120, 0
-  %122 = zext i1 %121 to i32
+  %117 = zext i1 %116 to i32
   br label %land.merge21
 land.merge21:
-  %123 = phi i32 [0, %if.merge12], [%122, %land.rhs20]
-  %124 = icmp ne i32 %123, 0
-  br i1 %124, label %lor.merge23, label %lor.rhs22
+  %118 = phi i32 [0, %if.merge12], [%117, %land.rhs20]
+  %119 = icmp ne i32 %118, 0
+  br i1 %119, label %lor.merge23, label %lor.rhs22
 lor.rhs22:
-  %125 = load i32, i32* %69, align 4
-  %126 = load i32, i32* %69, align 4
-  %127 = icmp sge i32 %125, %126
-  %128 = zext i1 %127 to i32
-  %129 = icmp ne i32 %128, 0
-  %130 = zext i1 %129 to i32
+  %120 = load i32, i32* %alloc_5, align 4
+  %121 = load i32, i32* %alloc_5, align 4
+  %122 = icmp sge i32 %120, %121
+  %123 = zext i1 %122 to i32
+  %124 = icmp ne i32 %123, 0
+  %125 = zext i1 %124 to i32
   br label %lor.merge23
 lor.merge23:
-  %131 = phi i32 [1, %land.merge21], [%130, %lor.rhs22]
-  %132 = icmp ne i32 %131, 0
-  br i1 %132, label %if.then13, label %if.merge13
+  %126 = phi i32 [1, %land.merge21], [%125, %lor.rhs22]
+  %127 = icmp ne i32 %126, 0
+  br i1 %127, label %if.then13, label %if.merge13
 if.then13:
   call void @putch(i32 74)
   br label %if.merge13
 if.merge13:
-  %133 = load i32, i32* %65, align 4
-  %134 = load i32, i32* %66, align 4
-  %135 = icmp eq i32 %134, 0
-  %136 = zext i1 %135 to i32
-  %137 = icmp eq i32 %133, %136
+  %128 = load i32, i32* %alloc_1, align 4
+  %129 = load i32, i32* %alloc_2, align 4
+  %130 = icmp eq i32 %129, 0
+  %131 = zext i1 %130 to i32
+  %132 = icmp eq i32 %128, %131
+  %133 = zext i1 %132 to i32
+  %134 = icmp ne i32 %133, 0
+  br i1 %134, label %lor.merge25, label %lor.rhs24
+lor.rhs24:
+  %135 = load i32, i32* %alloc_4, align 4
+  %136 = load i32, i32* %alloc_4, align 4
+  %137 = icmp slt i32 %135, %136
   %138 = zext i1 %137 to i32
   %139 = icmp ne i32 %138, 0
-  br i1 %139, label %lor.merge25, label %lor.rhs24
-lor.rhs24:
-  %140 = load i32, i32* %68, align 4
-  %141 = load i32, i32* %68, align 4
-  %142 = icmp slt i32 %140, %141
+  br i1 %139, label %land.rhs26, label %land.merge27
+land.rhs26:
+  %140 = load i32, i32* %alloc_5, align 4
+  %141 = load i32, i32* %alloc_5, align 4
+  %142 = icmp sge i32 %140, %141
   %143 = zext i1 %142 to i32
   %144 = icmp ne i32 %143, 0
-  br i1 %144, label %land.rhs26, label %land.merge27
-land.rhs26:
-  %145 = load i32, i32* %69, align 4
-  %146 = load i32, i32* %69, align 4
-  %147 = icmp sge i32 %145, %146
-  %148 = zext i1 %147 to i32
-  %149 = icmp ne i32 %148, 0
-  %150 = zext i1 %149 to i32
+  %145 = zext i1 %144 to i32
   br label %land.merge27
 land.merge27:
-  %151 = phi i32 [0, %lor.rhs24], [%150, %land.rhs26]
-  %152 = icmp ne i32 %151, 0
-  %153 = zext i1 %152 to i32
+  %146 = phi i32 [0, %lor.rhs24], [%145, %land.rhs26]
+  %147 = icmp ne i32 %146, 0
+  %148 = zext i1 %147 to i32
   br label %lor.merge25
 lor.merge25:
-  %154 = phi i32 [1, %if.merge13], [%153, %land.merge27]
-  %155 = icmp ne i32 %154, 0
-  br i1 %155, label %if.then14, label %if.merge14
+  %149 = phi i32 [1, %if.merge13], [%148, %land.merge27]
+  %150 = icmp ne i32 %149, 0
+  br i1 %150, label %if.then14, label %if.merge14
 if.then14:
   call void @putch(i32 75)
   br label %if.merge14

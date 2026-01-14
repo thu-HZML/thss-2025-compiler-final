@@ -475,21 +475,54 @@ private:
         }
     }
 
+    // 新增：全局变量数组初始化扁平化（要求可在编译期求值，带 Padding）
+    template <typename T>
+    void flattenGlobalInitVal(std::vector<T> &target, int &currentIdx, SysYParser::InitValContext *ctx,
+                              const std::vector<int> &dims, int dimLevel)
+    {
+        int startIdx = currentIdx;
+        if (ctx->exp())
+        {
+            if (currentIdx < (int)target.size())
+            {
+                if constexpr (std::is_same_v<T, float>)
+                    target[currentIdx++] = evalFloatConstExp(ctx->exp());
+                else
+                    target[currentIdx++] = evalConstExp(ctx->exp());
+            }
+            else
+            {
+                currentIdx++;
+            }
+            return;
+        }
+        if (ctx->L_BRACE())
+        {
+            for (auto child : ctx->initVal())
+            {
+                flattenGlobalInitVal(target, currentIdx, child, dims, dimLevel + 1);
+            }
+            int blockSize = getDimSize(dims, dimLevel);
+            while (currentIdx < startIdx + blockSize && currentIdx < (int)target.size())
+            {
+                if constexpr (std::is_same_v<T, float>)
+                    target[currentIdx++] = 0.0f;
+                else
+                    target[currentIdx++] = 0;
+            }
+        }
+    }
+
     // 辅助函数：在入口块创建 Alloca 指令
     ValuePtr createEntryBlockAlloca(Type *type, const std::string &name = "")
     {
         BasicBlock *entryBB = currentFunction->blockList.front().get();
         static int allocCounter = 0;
         int id = allocCounter++;
-        // 使用非数字名称以避免 LLVM 编号顺序约束
-        // 必须以 % 开头
+        // 重要：不要把源代码里的标识符直接拼进 LLVM SSA 名称。
+        // 一些测例会用极长/极端命名，导致 LLVM 解析阶段出现“multiple definition of local value”。
+        // 这里统一使用稳定的自动命名，和源变量名解耦。
         std::string varName = "%alloc_" + std::to_string(id);
-        if (!name.empty())
-        {
-            // 简单的清理名称中的非字母数字字符（如果需要），这里假设 name 合法
-            // 添加前缀区别于普通变量
-            varName = "%" + name + "_addr_" + std::to_string(id);
-        }
 
         auto allocInst = std::make_unique<AllocaInst>(type, varName);
         ValuePtr data = allocInst.get();
@@ -840,7 +873,7 @@ public:
                 if (currentFunction)
                 {
                     // Local
-                    ValuePtr ptr = builder.CreateAlloca(fullType);
+                    ValuePtr ptr = createEntryBlockAlloca(fullType, name);
                     symbolTable.addSymbol(name, fullType, ptr, true, 0, 0.0f, true, dims);
 
                     Type *flatPtrTy = Type::getPointerTy(Type::getInt32Ty());
@@ -985,6 +1018,26 @@ public:
         return ss.str();
     }
 
+    std::string printGlobalFloatInit(Type *type, const std::vector<float> &data, int &offset)
+    {
+        if (!type->isArrayTy())
+        {
+            return "float " + ConstantFloat::get(data[offset++])->to_string();
+        }
+        std::stringstream ss;
+        ss << type->toString() << " [";
+        int elemCount = type->arraySize;
+        Type *elemType = type->elementType;
+        for (int i = 0; i < elemCount; ++i)
+        {
+            ss << printGlobalFloatInit(elemType, data, offset);
+            if (i < elemCount - 1)
+                ss << ", ";
+        }
+        ss << "]";
+        return ss.str();
+    }
+
     antlrcpp::Any visitVarDecl(SysYParser::VarDeclContext *ctx) override
     {
         Type *baseType = getBType(ctx->bType());
@@ -1001,7 +1054,7 @@ public:
 
                 if (currentFunction)
                 {
-                    ValuePtr allocaPtr = builder.CreateAlloca(ptrType);
+                    ValuePtr allocaPtr = createEntryBlockAlloca(ptrType, name);
                     symbolTable.addSymbol(name, ptrType, allocaPtr, false, 0, 0.0f, false, {}, true);
 
                     if (def->ASSIGN() && def->initVal())
@@ -1039,7 +1092,7 @@ public:
             if (currentFunction)
             {
                 // Local Variable
-                ValuePtr ptr = builder.CreateAlloca(fullType);
+                ValuePtr ptr = createEntryBlockAlloca(fullType, name);
                 symbolTable.addSymbol(name, fullType, ptr, false, 0, 0.0f, isArray, dims);
 
                 if (def->ASSIGN() && def->initVal())
@@ -1064,12 +1117,13 @@ public:
             {
                 // Global Variable
                 std::stringstream ss;
-                ss << "@" << name << " = dso_local global " << fullType->toString() << " ";
+                ss << "@" << name << " = dso_local global ";
 
                 if (def->ASSIGN() && def->initVal())
                 {
                     if (!isArray)
                     {
+                        ss << fullType->toString() << " ";
                         if (baseType->isFloatTy())
                         {
                             float val = evalFloatConstExp(def->initVal()->exp());
@@ -1083,57 +1137,29 @@ public:
                     }
                     else
                     {
-                        // Global Array Init (Support 1D explicit init)
-                        if (dims.size() == 1 && def->initVal() && !def->initVal()->exp())
+                        // Global Array Init (支持多维花括号初始化，要求元素可编译期求值)
+                        int totalSize = getTypeSize(fullType);
+                        if (baseType->isFloatTy())
                         {
-                            std::stringstream ssInit;
-                            ssInit << "[";
-                            int total = dims[0];
-                            int count = 0;
-                            auto children = def->initVal()->initVal();
-                            for (auto child : children)
-                            {
-                                if (child->exp())
-                                {
-                                    if (baseType->isFloatTy())
-                                    {
-                                        float val = evalFloatConstExp(child->exp());
-                                        ssInit << "float " << ConstantFloat::get(val)->to_string();
-                                    }
-                                    else
-                                    {
-                                        int val = evalConstExp(child->exp());
-                                        ssInit << "i32 " << val;
-                                    }
-                                }
-                                else
-                                {
-                                    // Nested brace in 1D array?
-                                    ssInit << (baseType->isFloatTy() ? "float 0.0" : "i32 0");
-                                }
-                                count++;
-                                if (count < total)
-                                    ssInit << ", ";
-                            }
-                            while (count < total)
-                            {
-                                ssInit << (baseType->isFloatTy() ? "float 0.0" : "i32 0");
-                                count++;
-                                if (count < total)
-                                    ssInit << ", ";
-                            }
-                            ssInit << "]";
-                            ss << ssInit.str();
+                            std::vector<float> initValues(totalSize, 0.0f);
+                            int currentIdx = 0;
+                            flattenGlobalInitVal(initValues, currentIdx, def->initVal(), dims, 0);
+                            int offset = 0;
+                            ss << printGlobalFloatInit(fullType, initValues, offset);
                         }
                         else
                         {
-                            ss << "zeroinitializer";
+                            std::vector<int> initValues(totalSize, 0);
+                            int currentIdx = 0;
+                            flattenGlobalInitVal(initValues, currentIdx, def->initVal(), dims, 0);
+                            int offset = 0;
+                            ss << printGlobalConstInit(fullType, initValues, offset);
                         }
                     }
                 }
                 else
                 {
-                    ss << "zeroinitializer";
+                    ss << fullType->toString() << " zeroinitializer";
                 }
 
                 ss << ", align 4";
@@ -1224,15 +1250,13 @@ public:
                     return builder.CreateLoad(ptr);
                 }
 
-                // 情况 2: 普通数组 (int a[10])
-                // ptr 是 [10 x i32]* (数组首地址)
-                // 使用 GEP 获取 &a[0] (i32*)
-                if (!info->isPointer && ctx->lVal()->L_BRACK().empty())
+                // 情况 2: 普通数组 (int a[10] 或 int b[5][10])
+                // ptr 指向当前维度的数组 (e.g. [10 x i32]*)
+                // 我们需要将其退化为首元素指针 (e.g. i32*)
+                if (!info->isPointer)
                 {
-                    int totalSize = 1;
-                    for (int d : info->dims)
-                        totalSize *= d;
-                    return builder.CreateGEP(ptr, new ConstantInt(0), totalSize);
+                    // 使用 GEP 获取 &arr[0]
+                    return builder.CreateGEP(ptr, new ConstantInt(0), 0);
                 }
 
                 return ptr;
@@ -1746,8 +1770,21 @@ public:
             return nullptr;
 
         // 将条件转换为布尔值
-        ValuePtr zero = new ConstantInt(0);
-        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        ValuePtr condBool;
+        if (cond->getType()->isInt1Ty())
+        {
+            condBool = cond;
+        }
+        else if (cond->getType()->isFloatTy())
+        {
+            ValuePtr zero = ConstantFloat::get(0.0f);
+            condBool = builder.CreateFCmp("une", cond, zero);
+        }
+        else
+        {
+            ValuePtr zero = new ConstantInt(0);
+            condBool = builder.CreateICmp("ne", cond, zero);
+        }
 
         // 创建基本块
         BasicBlock *thenBB = new BasicBlock("if.then" + std::to_string(currentIf));
@@ -1824,8 +1861,21 @@ public:
         if (!cond)
             return nullptr;
 
-        ValuePtr zero = new ConstantInt(0);
-        ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+        ValuePtr condBool;
+        if (cond->getType()->isInt1Ty())
+        {
+            condBool = cond;
+        }
+        else if (cond->getType()->isFloatTy())
+        {
+            ValuePtr zero = ConstantFloat::get(0.0f);
+            condBool = builder.CreateFCmp("une", cond, zero);
+        }
+        else
+        {
+            ValuePtr zero = new ConstantInt(0);
+            condBool = builder.CreateICmp("ne", cond, zero);
+        }
         builder.CreateCondBr(condBool, bodyBB, mergeBB);
 
         // 循环体
@@ -1887,8 +1937,21 @@ public:
             ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->condition));
             if (cond)
             {
-                ValuePtr zero = new ConstantInt(0);
-                ValuePtr condBool = builder.CreateICmp("ne", cond, zero);
+                ValuePtr condBool;
+                if (cond->getType()->isInt1Ty())
+                {
+                    condBool = cond;
+                }
+                else if (cond->getType()->isFloatTy())
+                {
+                    ValuePtr zero = ConstantFloat::get(0.0f);
+                    condBool = builder.CreateFCmp("une", cond, zero);
+                }
+                else
+                {
+                    ValuePtr zero = new ConstantInt(0);
+                    condBool = builder.CreateICmp("ne", cond, zero);
+                }
                 builder.CreateCondBr(condBool, bodyBB, mergeBB);
             }
         }

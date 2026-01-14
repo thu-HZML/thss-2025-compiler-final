@@ -508,7 +508,16 @@ public:
             var_name = "%" + var_name;
         }
         std::string phi_type = type->toString();
-        std::string phi_args = phi_type + " " + args;
+        
+        std::string phi_args = phi_type + " ";
+        for (size_t i = 0; i < incomings.size(); ++i)
+        {
+            phi_args += "[" + incomings[i].value->to_string() + ", %" + incomings[i].block->getName() + "]";
+            if (i < incomings.size() - 1)
+            {
+                phi_args += ", ";
+            }
+        }
 
         if (var_name.empty())
         {

@@ -14,14 +14,14 @@ declare void @stoptime()
 
 define i32 @main() {
 entry0:
-  %0 = alloca i32, align 4
-  %1 = alloca i32, align 4
-  store i32 15, i32* %0, align 4
-  store i32 12, i32* %1, align 4
-  %2 = load i32, i32* %0, align 4
-  %3 = load i32, i32* %1, align 4
-  %4 = add i32 %2, %3
-  %5 = add i32 %4, 61
-  ret i32 %5
+  %alloc_1 = alloca i32, align 4
+  %alloc_0 = alloca i32, align 4
+  store i32 15, i32* %alloc_0, align 4
+  store i32 12, i32* %alloc_1, align 4
+  %0 = load i32, i32* %alloc_0, align 4
+  %1 = load i32, i32* %alloc_1, align 4
+  %2 = add i32 %0, %1
+  %3 = add i32 %2, 61
+  ret i32 %3
 }
 

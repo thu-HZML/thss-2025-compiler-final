@@ -26,12 +26,12 @@ entry0:
 
 define i32 @main() {
 entry1:
-  %0 = alloca i32, align 4
+  %alloc_0 = alloca i32, align 4
   store i32 10, i32* @a, align 4
-  %1 = load i32, i32* @a, align 4
-  %2 = call i32 @func(i32 %1)
-  store i32 %2, i32* %0, align 4
-  %3 = load i32, i32* %0, align 4
-  ret i32 %3
+  %0 = load i32, i32* @a, align 4
+  %1 = call i32 @func(i32 %0)
+  store i32 %1, i32* %alloc_0, align 4
+  %2 = load i32, i32* %alloc_0, align 4
+  ret i32 %2
 }
 

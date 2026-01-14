@@ -16,36 +16,36 @@ declare void @stoptime()
 
 define i32 @main() {
 entry0:
+  %alloc_0 = alloca i32, align 4
   %0 = call i32 @getint()
   store i32 %0, i32* @a, align 4
   %1 = call i32 @getint()
   store i32 %1, i32* @b, align 4
-  %2 = alloca i32, align 4
-  %3 = load i32, i32* @a, align 4
-  %4 = load i32, i32* @b, align 4
-  %5 = icmp eq i32 %3, %4
-  %6 = zext i1 %5 to i32
-  %7 = icmp ne i32 %6, 0
-  br i1 %7, label %land.rhs1, label %land.merge2
+  %2 = load i32, i32* @a, align 4
+  %3 = load i32, i32* @b, align 4
+  %4 = icmp eq i32 %2, %3
+  %5 = zext i1 %4 to i32
+  %6 = icmp ne i32 %5, 0
+  br i1 %6, label %land.rhs1, label %land.merge2
 land.rhs1:
-  %8 = load i32, i32* @a, align 4
-  %9 = icmp ne i32 %8, 3
-  %10 = zext i1 %9 to i32
-  %11 = icmp ne i32 %10, 0
-  %12 = zext i1 %11 to i32
+  %7 = load i32, i32* @a, align 4
+  %8 = icmp ne i32 %7, 3
+  %9 = zext i1 %8 to i32
+  %10 = icmp ne i32 %9, 0
+  %11 = zext i1 %10 to i32
   br label %land.merge2
 land.merge2:
-  %13 = phi i32 [0, %entry0], [%12, %land.rhs1]
-  %14 = icmp ne i32 %13, 0
-  br i1 %14, label %if.then0, label %if.else0
+  %12 = phi i32 [0, %entry0], [%11, %land.rhs1]
+  %13 = icmp ne i32 %12, 0
+  br i1 %13, label %if.then0, label %if.else0
 if.then0:
-  store i32 1, i32* %2, align 4
+  store i32 1, i32* %alloc_0, align 4
   br label %if.merge0
 if.else0:
-  store i32 0, i32* %2, align 4
+  store i32 0, i32* %alloc_0, align 4
   br label %if.merge0
 if.merge0:
-  %15 = load i32, i32* %2, align 4
-  ret i32 %15
+  %14 = load i32, i32* %alloc_0, align 4
+  ret i32 %14
 }
 

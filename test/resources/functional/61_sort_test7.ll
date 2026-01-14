@@ -15,6 +15,10 @@ declare void @stoptime()
 
 define void @merge_sort(i32 %arg0, i32 %arg1) {
 entry0:
+  %alloc_3 = alloca i32, align 4
+  %alloc_2 = alloca i32, align 4
+  %alloc_1 = alloca i32, align 4
+  %alloc_0 = alloca i32, align 4
   %0 = alloca i32, align 4
   store i32 %arg0, i32* %0, align 4
   %1 = alloca i32, align 4
@@ -29,162 +33,158 @@ entry0:
 if.then0:
   ret void
 if.merge0:
-  %8 = alloca i32, align 4
-  %9 = load i32, i32* %0, align 4
-  %10 = load i32, i32* %1, align 4
-  %11 = add i32 %9, %10
-  %12 = sdiv i32 %11, 2
-  store i32 %12, i32* %8, align 4
-  %13 = load i32, i32* %0, align 4
-  %14 = load i32, i32* %8, align 4
-  call void @merge_sort(i32 %13, i32 %14)
-  %15 = load i32, i32* %8, align 4
-  %16 = load i32, i32* %1, align 4
-  call void @merge_sort(i32 %15, i32 %16)
-  %17 = alloca i32, align 4
+  %8 = load i32, i32* %0, align 4
+  %9 = load i32, i32* %1, align 4
+  %10 = add i32 %8, %9
+  %11 = sdiv i32 %10, 2
+  store i32 %11, i32* %alloc_0, align 4
+  %12 = load i32, i32* %0, align 4
+  %13 = load i32, i32* %alloc_0, align 4
+  call void @merge_sort(i32 %12, i32 %13)
+  %14 = load i32, i32* %alloc_0, align 4
+  %15 = load i32, i32* %1, align 4
+  call void @merge_sort(i32 %14, i32 %15)
+  %16 = load i32, i32* %0, align 4
+  store i32 %16, i32* %alloc_1, align 4
+  %17 = load i32, i32* %alloc_0, align 4
+  store i32 %17, i32* %alloc_2, align 4
   %18 = load i32, i32* %0, align 4
-  store i32 %18, i32* %17, align 4
-  %19 = alloca i32, align 4
-  %20 = load i32, i32* %8, align 4
-  store i32 %20, i32* %19, align 4
-  %21 = alloca i32, align 4
-  %22 = load i32, i32* %0, align 4
-  store i32 %22, i32* %21, align 4
+  store i32 %18, i32* %alloc_3, align 4
   br label %while.cond.0
 while.cond.0:
-  %23 = load i32, i32* %17, align 4
-  %24 = load i32, i32* %8, align 4
-  %25 = icmp slt i32 %23, %24
-  %26 = zext i1 %25 to i32
-  %27 = icmp ne i32 %26, 0
-  br i1 %27, label %land.rhs1, label %land.merge2
+  %19 = load i32, i32* %alloc_1, align 4
+  %20 = load i32, i32* %alloc_0, align 4
+  %21 = icmp slt i32 %19, %20
+  %22 = zext i1 %21 to i32
+  %23 = icmp ne i32 %22, 0
+  br i1 %23, label %land.rhs1, label %land.merge2
 land.rhs1:
-  %28 = load i32, i32* %19, align 4
-  %29 = load i32, i32* %1, align 4
-  %30 = icmp slt i32 %28, %29
-  %31 = zext i1 %30 to i32
-  %32 = icmp ne i32 %31, 0
-  %33 = zext i1 %32 to i32
+  %24 = load i32, i32* %alloc_2, align 4
+  %25 = load i32, i32* %1, align 4
+  %26 = icmp slt i32 %24, %25
+  %27 = zext i1 %26 to i32
+  %28 = icmp ne i32 %27, 0
+  %29 = zext i1 %28 to i32
   br label %land.merge2
 land.merge2:
-  %34 = phi i32 [0, %while.cond.0], [%33, %land.rhs1]
-  %35 = icmp ne i32 %34, 0
-  br i1 %35, label %while.body.0, label %while.merge.0
+  %30 = phi i32 [0, %while.cond.0], [%29, %land.rhs1]
+  %31 = icmp ne i32 %30, 0
+  br i1 %31, label %while.body.0, label %while.merge.0
 while.body.0:
+  %32 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %33 = load i32, i32* %alloc_1, align 4
+  %34 = getelementptr inbounds [100 x i32], [100 x i32]* %32, i32 0, i32 %33
+  %35 = load i32, i32* %34, align 4
   %36 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %37 = load i32, i32* %17, align 4
+  %37 = load i32, i32* %alloc_2, align 4
   %38 = getelementptr inbounds [100 x i32], [100 x i32]* %36, i32 0, i32 %37
   %39 = load i32, i32* %38, align 4
-  %40 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %41 = load i32, i32* %19, align 4
-  %42 = getelementptr inbounds [100 x i32], [100 x i32]* %40, i32 0, i32 %41
-  %43 = load i32, i32* %42, align 4
-  %44 = icmp slt i32 %39, %43
-  %45 = zext i1 %44 to i32
-  %46 = icmp ne i32 %45, 0
-  br i1 %46, label %if.then1, label %if.else1
+  %40 = icmp slt i32 %35, %39
+  %41 = zext i1 %40 to i32
+  %42 = icmp ne i32 %41, 0
+  br i1 %42, label %if.then1, label %if.else1
 if.then1:
-  %47 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
-  %48 = load i32, i32* %21, align 4
-  %49 = getelementptr inbounds [100 x i32], [100 x i32]* %47, i32 0, i32 %48
-  %50 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %51 = load i32, i32* %17, align 4
-  %52 = getelementptr inbounds [100 x i32], [100 x i32]* %50, i32 0, i32 %51
-  %53 = load i32, i32* %52, align 4
-  store i32 %53, i32* %49, align 4
-  %54 = load i32, i32* %17, align 4
-  %55 = add i32 %54, 1
-  store i32 %55, i32* %17, align 4
+  %43 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
+  %44 = load i32, i32* %alloc_3, align 4
+  %45 = getelementptr inbounds [100 x i32], [100 x i32]* %43, i32 0, i32 %44
+  %46 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %47 = load i32, i32* %alloc_1, align 4
+  %48 = getelementptr inbounds [100 x i32], [100 x i32]* %46, i32 0, i32 %47
+  %49 = load i32, i32* %48, align 4
+  store i32 %49, i32* %45, align 4
+  %50 = load i32, i32* %alloc_1, align 4
+  %51 = add i32 %50, 1
+  store i32 %51, i32* %alloc_1, align 4
   br label %if.merge1
 if.else1:
-  %56 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
-  %57 = load i32, i32* %21, align 4
-  %58 = getelementptr inbounds [100 x i32], [100 x i32]* %56, i32 0, i32 %57
-  %59 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %60 = load i32, i32* %19, align 4
-  %61 = getelementptr inbounds [100 x i32], [100 x i32]* %59, i32 0, i32 %60
-  %62 = load i32, i32* %61, align 4
-  store i32 %62, i32* %58, align 4
-  %63 = load i32, i32* %19, align 4
-  %64 = add i32 %63, 1
-  store i32 %64, i32* %19, align 4
+  %52 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
+  %53 = load i32, i32* %alloc_3, align 4
+  %54 = getelementptr inbounds [100 x i32], [100 x i32]* %52, i32 0, i32 %53
+  %55 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %56 = load i32, i32* %alloc_2, align 4
+  %57 = getelementptr inbounds [100 x i32], [100 x i32]* %55, i32 0, i32 %56
+  %58 = load i32, i32* %57, align 4
+  store i32 %58, i32* %54, align 4
+  %59 = load i32, i32* %alloc_2, align 4
+  %60 = add i32 %59, 1
+  store i32 %60, i32* %alloc_2, align 4
   br label %if.merge1
 if.merge1:
-  %65 = load i32, i32* %21, align 4
-  %66 = add i32 %65, 1
-  store i32 %66, i32* %21, align 4
+  %61 = load i32, i32* %alloc_3, align 4
+  %62 = add i32 %61, 1
+  store i32 %62, i32* %alloc_3, align 4
   br label %while.cond.0
 while.merge.0:
   br label %while.cond.1
 while.cond.1:
-  %67 = load i32, i32* %17, align 4
-  %68 = load i32, i32* %8, align 4
-  %69 = icmp slt i32 %67, %68
-  %70 = zext i1 %69 to i32
-  %71 = icmp ne i32 %70, 0
-  br i1 %71, label %while.body.1, label %while.merge.1
+  %63 = load i32, i32* %alloc_1, align 4
+  %64 = load i32, i32* %alloc_0, align 4
+  %65 = icmp slt i32 %63, %64
+  %66 = zext i1 %65 to i32
+  %67 = icmp ne i32 %66, 0
+  br i1 %67, label %while.body.1, label %while.merge.1
 while.body.1:
-  %72 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
-  %73 = load i32, i32* %21, align 4
-  %74 = getelementptr inbounds [100 x i32], [100 x i32]* %72, i32 0, i32 %73
-  %75 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %76 = load i32, i32* %17, align 4
-  %77 = getelementptr inbounds [100 x i32], [100 x i32]* %75, i32 0, i32 %76
-  %78 = load i32, i32* %77, align 4
-  store i32 %78, i32* %74, align 4
-  %79 = load i32, i32* %17, align 4
-  %80 = add i32 %79, 1
-  store i32 %80, i32* %17, align 4
-  %81 = load i32, i32* %21, align 4
-  %82 = add i32 %81, 1
-  store i32 %82, i32* %21, align 4
+  %68 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
+  %69 = load i32, i32* %alloc_3, align 4
+  %70 = getelementptr inbounds [100 x i32], [100 x i32]* %68, i32 0, i32 %69
+  %71 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %72 = load i32, i32* %alloc_1, align 4
+  %73 = getelementptr inbounds [100 x i32], [100 x i32]* %71, i32 0, i32 %72
+  %74 = load i32, i32* %73, align 4
+  store i32 %74, i32* %70, align 4
+  %75 = load i32, i32* %alloc_1, align 4
+  %76 = add i32 %75, 1
+  store i32 %76, i32* %alloc_1, align 4
+  %77 = load i32, i32* %alloc_3, align 4
+  %78 = add i32 %77, 1
+  store i32 %78, i32* %alloc_3, align 4
   br label %while.cond.1
 while.merge.1:
   br label %while.cond.2
 while.cond.2:
-  %83 = load i32, i32* %19, align 4
-  %84 = load i32, i32* %1, align 4
-  %85 = icmp slt i32 %83, %84
-  %86 = zext i1 %85 to i32
-  %87 = icmp ne i32 %86, 0
-  br i1 %87, label %while.body.2, label %while.merge.2
+  %79 = load i32, i32* %alloc_2, align 4
+  %80 = load i32, i32* %1, align 4
+  %81 = icmp slt i32 %79, %80
+  %82 = zext i1 %81 to i32
+  %83 = icmp ne i32 %82, 0
+  br i1 %83, label %while.body.2, label %while.merge.2
 while.body.2:
-  %88 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
-  %89 = load i32, i32* %21, align 4
-  %90 = getelementptr inbounds [100 x i32], [100 x i32]* %88, i32 0, i32 %89
-  %91 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %92 = load i32, i32* %19, align 4
-  %93 = getelementptr inbounds [100 x i32], [100 x i32]* %91, i32 0, i32 %92
-  %94 = load i32, i32* %93, align 4
-  store i32 %94, i32* %90, align 4
-  %95 = load i32, i32* %19, align 4
-  %96 = add i32 %95, 1
-  store i32 %96, i32* %19, align 4
-  %97 = load i32, i32* %21, align 4
-  %98 = add i32 %97, 1
-  store i32 %98, i32* %21, align 4
+  %84 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
+  %85 = load i32, i32* %alloc_3, align 4
+  %86 = getelementptr inbounds [100 x i32], [100 x i32]* %84, i32 0, i32 %85
+  %87 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %88 = load i32, i32* %alloc_2, align 4
+  %89 = getelementptr inbounds [100 x i32], [100 x i32]* %87, i32 0, i32 %88
+  %90 = load i32, i32* %89, align 4
+  store i32 %90, i32* %86, align 4
+  %91 = load i32, i32* %alloc_2, align 4
+  %92 = add i32 %91, 1
+  store i32 %92, i32* %alloc_2, align 4
+  %93 = load i32, i32* %alloc_3, align 4
+  %94 = add i32 %93, 1
+  store i32 %94, i32* %alloc_3, align 4
   br label %while.cond.2
 while.merge.2:
   br label %while.cond.3
 while.cond.3:
-  %99 = load i32, i32* %0, align 4
-  %100 = load i32, i32* %1, align 4
-  %101 = icmp slt i32 %99, %100
-  %102 = zext i1 %101 to i32
-  %103 = icmp ne i32 %102, 0
-  br i1 %103, label %while.body.3, label %while.merge.3
+  %95 = load i32, i32* %0, align 4
+  %96 = load i32, i32* %1, align 4
+  %97 = icmp slt i32 %95, %96
+  %98 = zext i1 %97 to i32
+  %99 = icmp ne i32 %98, 0
+  br i1 %99, label %while.body.3, label %while.merge.3
 while.body.3:
-  %104 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %105 = load i32, i32* %0, align 4
-  %106 = getelementptr inbounds [100 x i32], [100 x i32]* %104, i32 0, i32 %105
-  %107 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
-  %108 = load i32, i32* %0, align 4
-  %109 = getelementptr inbounds [100 x i32], [100 x i32]* %107, i32 0, i32 %108
-  %110 = load i32, i32* %109, align 4
-  store i32 %110, i32* %106, align 4
-  %111 = load i32, i32* %0, align 4
-  %112 = add i32 %111, 1
-  store i32 %112, i32* %0, align 4
+  %100 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %101 = load i32, i32* %0, align 4
+  %102 = getelementptr inbounds [100 x i32], [100 x i32]* %100, i32 0, i32 %101
+  %103 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 1
+  %104 = load i32, i32* %0, align 4
+  %105 = getelementptr inbounds [100 x i32], [100 x i32]* %103, i32 0, i32 %104
+  %106 = load i32, i32* %105, align 4
+  store i32 %106, i32* %102, align 4
+  %107 = load i32, i32* %0, align 4
+  %108 = add i32 %107, 1
+  store i32 %108, i32* %0, align 4
   br label %while.cond.3
 while.merge.3:
   ret void
@@ -192,17 +192,17 @@ while.merge.3:
 
 define i32 @main() {
 entry3:
-  %0 = alloca i32, align 4
-  %1 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %2 = getelementptr inbounds [100 x i32], [100 x i32]* %1, i32 0, i32 0
-  %3 = call i32 @getarray(i32* %2)
-  store i32 %3, i32* %0, align 4
-  %4 = load i32, i32* %0, align 4
-  call void @merge_sort(i32 0, i32 %4)
-  %5 = load i32, i32* %0, align 4
-  %6 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
-  %7 = getelementptr inbounds [100 x i32], [100 x i32]* %6, i32 0, i32 0
-  call void @putarray(i32 %5, i32* %7)
+  %alloc_4 = alloca i32, align 4
+  %0 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %1 = getelementptr inbounds [100 x i32], [100 x i32]* %0, i32 0, i32 0
+  %2 = call i32 @getarray(i32* %1)
+  store i32 %2, i32* %alloc_4, align 4
+  %3 = load i32, i32* %alloc_4, align 4
+  call void @merge_sort(i32 0, i32 %3)
+  %4 = load i32, i32* %alloc_4, align 4
+  %5 = getelementptr inbounds [2 x [100 x i32]], [2 x [100 x i32]]* @buf, i32 0, i32 0
+  %6 = getelementptr inbounds [100 x i32], [100 x i32]* %5, i32 0, i32 0
+  call void @putarray(i32 %4, i32* %6)
   ret i32 0
 }
 

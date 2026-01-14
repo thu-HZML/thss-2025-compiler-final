@@ -71,23 +71,23 @@ if.merge0:
 
 define i32 @main() {
 entry2:
-  %0 = alloca i32, align 4
-  %1 = call i32 @getint()
-  store i32 %1, i32* %0, align 4
+  %alloc_0 = alloca i32, align 4
+  %0 = call i32 @getint()
+  store i32 %0, i32* %alloc_0, align 4
   br label %while.cond.0
 while.cond.0:
-  %2 = load i32, i32* %0, align 4
-  %3 = icmp sgt i32 %2, 0
-  %4 = zext i1 %3 to i32
-  %5 = icmp ne i32 %4, 0
-  br i1 %5, label %while.body.0, label %while.merge.0
+  %1 = load i32, i32* %alloc_0, align 4
+  %2 = icmp sgt i32 %1, 0
+  %3 = zext i1 %2 to i32
+  %4 = icmp ne i32 %3, 0
+  br i1 %4, label %while.body.0, label %while.merge.0
 while.body.0:
-  %6 = call i32 @getint()
-  call void @hanoi(i32 %6, i32 1, i32 2, i32 3)
+  %5 = call i32 @getint()
+  call void @hanoi(i32 %5, i32 1, i32 2, i32 3)
   call void @putch(i32 10)
-  %7 = load i32, i32* %0, align 4
-  %8 = sub i32 %7, 1
-  store i32 %8, i32* %0, align 4
+  %6 = load i32, i32* %alloc_0, align 4
+  %7 = sub i32 %6, 1
+  store i32 %7, i32* %alloc_0, align 4
   br label %while.cond.0
 while.merge.0:
   ret i32 0

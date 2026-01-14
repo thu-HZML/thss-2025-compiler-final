@@ -19,10 +19,10 @@ entry0:
 
 define i32 @main() {
 entry1:
-  %0 = alloca i32, align 4
-  %1 = call i32 @defn()
-  store i32 %1, i32* %0, align 4
-  %2 = load i32, i32* %0, align 4
-  ret i32 %2
+  %alloc_0 = alloca i32, align 4
+  %0 = call i32 @defn()
+  store i32 %0, i32* %alloc_0, align 4
+  %1 = load i32, i32* %alloc_0, align 4
+  ret i32 %1
 }
 
