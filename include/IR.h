@@ -474,8 +474,7 @@ public:
                       "label %" + targetBB->getName()) {}
 };
 
-// --- 14. Phi节点指令（需要在BasicBlock之后定义） ---
-// 在IR.h中修复PhiNode
+// --- 14. Phi节点指令 ---
 class PhiNode : public Instruction
 {
 public:
@@ -646,5 +645,28 @@ public:
             ss << f->print() << "\n";
         }
         return ss.str();
+    }
+};
+
+// --- 17. Switch指令 ---
+class SwitchInst : public Instruction {
+public:
+    SwitchInst(ValuePtr cond, BasicBlock* defaultBB, 
+               const std::vector<std::pair<ValuePtr, BasicBlock*>>& cases)
+        : Instruction(Type::getVoidTy(), "", "switch", "") {
+        
+        std::stringstream args;
+        // 修正：在 defaultBB 后面添加逗号
+        args << cond->getType()->toString() << " " << cond->to_string()
+             << ", label %" << defaultBB->getName() << " [";
+        
+        for (size_t i = 0; i < cases.size(); ++i) {
+            args << " " << cases[i].first->getType()->toString() 
+                 << " " << cases[i].first->to_string()
+                 << ", label %" << cases[i].second->getName();
+        }
+        args << " ]";
+        
+        this->args = args.str();
     }
 };

@@ -62,7 +62,8 @@ stmt:
 	)? R_PAREN body = stmt	# forStmt
 	| BREAK SEMICOLON		# breakStmt
 	| CONTINUE SEMICOLON	# continueStmt
-	| RETURN exp? SEMICOLON	# returnStmt;
+	| RETURN exp? SEMICOLON	# returnStmt
+	| SWITCH L_PAREN exp R_PAREN L_BRACE switchCase* R_BRACE	# switchStmt;
 
 exp:
 	lVal										# lValExp
@@ -88,3 +89,7 @@ funcRParams: exp (COMMA exp)*;
 constExp: exp;
 
 pointerPrefix: MUL;
+
+switchCase:
+    CASE constExp COLON blockItem*  # caseClause
+    | DEFAULT COLON blockItem*      # defaultClause;

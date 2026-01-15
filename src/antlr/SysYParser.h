@@ -13,12 +13,13 @@ class  SysYParser : public antlr4::Parser {
 public:
   enum {
     CONST = 1, INT = 2, FLOAT = 3, VOID = 4, IF = 5, ELSE = 6, WHILE = 7, 
-    FOR = 8, STRUCT = 9, BREAK = 10, CONTINUE = 11, RETURN = 12, IDENT = 13, 
-    FloatConst = 14, IntConst = 15, L_PAREN = 16, R_PAREN = 17, L_BRACK = 18, 
-    R_BRACK = 19, L_BRACE = 20, R_BRACE = 21, DOT = 22, COMMA = 23, SEMICOLON = 24, 
-    PLUS = 25, MINUS = 26, MUL = 27, DIV = 28, MOD = 29, ASSIGN = 30, EQ = 31, 
-    NEQ = 32, LT = 33, GT = 34, LE = 35, GE = 36, AND = 37, OR = 38, NOT = 39, 
-    BITAND = 40, WS = 41, LINE_COMMENT = 42, BLOCK_COMMENT = 43
+    FOR = 8, STRUCT = 9, BREAK = 10, CONTINUE = 11, RETURN = 12, SWITCH = 13, 
+    CASE = 14, DEFAULT = 15, IDENT = 16, FloatConst = 17, IntConst = 18, 
+    L_PAREN = 19, R_PAREN = 20, L_BRACK = 21, R_BRACK = 22, L_BRACE = 23, 
+    R_BRACE = 24, DOT = 25, COMMA = 26, SEMICOLON = 27, COLON = 28, PLUS = 29, 
+    MINUS = 30, MUL = 31, DIV = 32, MOD = 33, ASSIGN = 34, EQ = 35, NEQ = 36, 
+    LT = 37, GT = 38, LE = 39, GE = 40, AND = 41, OR = 42, NOT = 43, BITAND = 44, 
+    WS = 45, LINE_COMMENT = 46, BLOCK_COMMENT = 47
   };
 
   enum {
@@ -28,7 +29,7 @@ public:
     RuleFuncDef = 12, RuleFuncType = 13, RuleFuncFParams = 14, RuleFuncFParam = 15, 
     RuleBlock = 16, RuleBlockItem = 17, RuleStmt = 18, RuleExp = 19, RuleCond = 20, 
     RuleLVal = 21, RuleNumber = 22, RuleFuncRParams = 23, RuleConstExp = 24, 
-    RulePointerPrefix = 25
+    RulePointerPrefix = 25, RuleSwitchCase = 26
   };
 
   explicit SysYParser(antlr4::TokenStream *input);
@@ -73,7 +74,8 @@ public:
   class NumberContext;
   class FuncRParamsContext;
   class ConstExpContext;
-  class PointerPrefixContext; 
+  class PointerPrefixContext;
+  class SwitchCaseContext; 
 
   class  CompUnitContext : public antlr4::ParserRuleContext {
   public:
@@ -407,6 +409,22 @@ public:
     virtual size_t getRuleIndex() const override;
 
    
+  };
+
+  class  SwitchStmtContext : public StmtContext {
+  public:
+    SwitchStmtContext(StmtContext *ctx);
+
+    antlr4::tree::TerminalNode *SWITCH();
+    antlr4::tree::TerminalNode *L_PAREN();
+    ExpContext *exp();
+    antlr4::tree::TerminalNode *R_PAREN();
+    antlr4::tree::TerminalNode *L_BRACE();
+    antlr4::tree::TerminalNode *R_BRACE();
+    std::vector<SwitchCaseContext *> switchCase();
+    SwitchCaseContext* switchCase(size_t i);
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
   };
 
   class  ForStmtContext : public StmtContext {
@@ -761,6 +779,46 @@ public:
   };
 
   PointerPrefixContext* pointerPrefix();
+
+  class  SwitchCaseContext : public antlr4::ParserRuleContext {
+  public:
+    SwitchCaseContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+   
+    SwitchCaseContext() = default;
+    void copyFrom(SwitchCaseContext *context);
+    using antlr4::ParserRuleContext::copyFrom;
+
+    virtual size_t getRuleIndex() const override;
+
+   
+  };
+
+  class  DefaultClauseContext : public SwitchCaseContext {
+  public:
+    DefaultClauseContext(SwitchCaseContext *ctx);
+
+    antlr4::tree::TerminalNode *DEFAULT();
+    antlr4::tree::TerminalNode *COLON();
+    std::vector<BlockItemContext *> blockItem();
+    BlockItemContext* blockItem(size_t i);
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+  };
+
+  class  CaseClauseContext : public SwitchCaseContext {
+  public:
+    CaseClauseContext(SwitchCaseContext *ctx);
+
+    antlr4::tree::TerminalNode *CASE();
+    ConstExpContext *constExp();
+    antlr4::tree::TerminalNode *COLON();
+    std::vector<BlockItemContext *> blockItem();
+    BlockItemContext* blockItem(size_t i);
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+  };
+
+  SwitchCaseContext* switchCase();
 
 
   bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;

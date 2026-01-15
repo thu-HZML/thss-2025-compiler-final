@@ -13,6 +13,9 @@ STRUCT: 'struct';
 BREAK: 'break';
 CONTINUE: 'continue';
 RETURN: 'return';
+SWITCH: 'switch';
+CASE: 'case';
+DEFAULT: 'default';
 
 // Identifiers
 IDENT: [a-zA-Z_] [a-zA-Z_0-9]*;
@@ -37,6 +40,7 @@ R_BRACE: '}';
 DOT: '.';
 COMMA: ',';
 SEMICOLON: ';';
+COLON: ':';
 
 PLUS: '+';
 MINUS: '-';

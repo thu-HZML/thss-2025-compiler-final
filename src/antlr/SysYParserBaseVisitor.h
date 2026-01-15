@@ -123,6 +123,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitSwitchStmt(SysYParser::SwitchStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitLandExp(SysYParser::LandExpContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -188,6 +192,14 @@ public:
   }
 
   virtual std::any visitPointerPrefix(SysYParser::PointerPrefixContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitCaseClause(SysYParser::CaseClauseContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDefaultClause(SysYParser::DefaultClauseContext *ctx) override {
     return visitChildren(ctx);
   }
 

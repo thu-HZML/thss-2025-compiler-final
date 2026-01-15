@@ -13,12 +13,13 @@ class  SysYLexer : public antlr4::Lexer {
 public:
   enum {
     CONST = 1, INT = 2, FLOAT = 3, VOID = 4, IF = 5, ELSE = 6, WHILE = 7, 
-    FOR = 8, STRUCT = 9, BREAK = 10, CONTINUE = 11, RETURN = 12, IDENT = 13, 
-    FloatConst = 14, IntConst = 15, L_PAREN = 16, R_PAREN = 17, L_BRACK = 18, 
-    R_BRACK = 19, L_BRACE = 20, R_BRACE = 21, DOT = 22, COMMA = 23, SEMICOLON = 24, 
-    PLUS = 25, MINUS = 26, MUL = 27, DIV = 28, MOD = 29, ASSIGN = 30, EQ = 31, 
-    NEQ = 32, LT = 33, GT = 34, LE = 35, GE = 36, AND = 37, OR = 38, NOT = 39, 
-    BITAND = 40, WS = 41, LINE_COMMENT = 42, BLOCK_COMMENT = 43
+    FOR = 8, STRUCT = 9, BREAK = 10, CONTINUE = 11, RETURN = 12, SWITCH = 13, 
+    CASE = 14, DEFAULT = 15, IDENT = 16, FloatConst = 17, IntConst = 18, 
+    L_PAREN = 19, R_PAREN = 20, L_BRACK = 21, R_BRACK = 22, L_BRACE = 23, 
+    R_BRACE = 24, DOT = 25, COMMA = 26, SEMICOLON = 27, COLON = 28, PLUS = 29, 
+    MINUS = 30, MUL = 31, DIV = 32, MOD = 33, ASSIGN = 34, EQ = 35, NEQ = 36, 
+    LT = 37, GT = 38, LE = 39, GE = 40, AND = 41, OR = 42, NOT = 43, BITAND = 44, 
+    WS = 45, LINE_COMMENT = 46, BLOCK_COMMENT = 47
   };
 
   explicit SysYLexer(antlr4::CharStream *input);
