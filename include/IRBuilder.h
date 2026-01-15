@@ -469,7 +469,7 @@ public:
         currentBlock->addInstruction(std::move(inst));
         return res;
     }
-    // 9. Pointer GEP (for int* and int[])
+    // 19. Pointer GEP (for int* and int[])
     ValuePtr CreatePointerGEP(ValuePtr ptr, ValuePtr idx)
     {
         std::string name = nextName();
@@ -489,7 +489,7 @@ public:
         return res;
     }
 
-    // 10. Pointer Store/Load
+    // 20. Pointer Store/Load
     void CreatePointerStore(ValuePtr val, ValuePtr ptr)
     {
         std::string args = "i32* " + val->to_string() + ", i32** " + ptr->to_string() + ", align 8";
@@ -504,5 +504,12 @@ public:
         ValuePtr res = inst.get();
         currentBlock->addInstruction(std::move(inst));
         return res;
+    }
+
+    // 21. Switch指令
+    void CreateSwitch(ValuePtr cond, BasicBlock* defaultBB, 
+                    const std::vector<std::pair<ValuePtr, BasicBlock*>>& cases) {
+        auto inst = std::make_unique<SwitchInst>(cond, defaultBB, cases);
+        currentBlock->addInstruction(std::move(inst));
     }
 };

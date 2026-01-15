@@ -1,0 +1,19 @@
+int main() {
+    int x = 2;
+    int result = 0;
+    
+    switch (x) {
+        case 2:
+            result = result + 20;
+            // 这里没有break，但在你的实现中会自动跳到结束
+        case 3:
+            result = result + 30;
+            // 这里也没有break
+        default:
+            result = result + 5;
+    }
+    
+    putint(result);
+    putch(10);
+    return 0;
+}

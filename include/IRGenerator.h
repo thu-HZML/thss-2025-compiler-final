@@ -1998,22 +1998,30 @@ public:
     }
 
     // 新增：break语句
-    antlrcpp::Any visitBreakStmt(SysYParser::BreakStmtContext *ctx) override
-    {
-        if (mergeBlockStack.empty())
-        {
-            // 错误：break不在循环内
-            std::cerr << "Error: break statement not within a loop" << std::endl;
+    antlrcpp::Any visitBreakStmt(SysYParser::BreakStmtContext* ctx) override {
+        if (mergeBlockStack.empty()) {
+            // 错误：break不在循环或switch内
+            std::cerr << "Error: break statement not within a loop or switch" << std::endl;
             return nullptr;
         }
-
-        builder.CreateBr(mergeBlockStack.top());
-
-        // 创建不可达块（break后的代码不会被执行）
-        BasicBlock *unreachable = new BasicBlock("break.unreachable");
+        
+        BasicBlock* target = mergeBlockStack.top();
+        if (!target) {
+            std::cerr << "Error: break has no valid target" << std::endl;
+            return nullptr;
+        }
+        
+        builder.CreateBr(target);
+        
+        // 注意：不创建 unreachable 块，让后续代码由用户处理
+        // 或者只在必要时创建
+        
+        // 如果需要创建不可达块，确保名称唯一
+        static int unreachableCounter = 0;
+        BasicBlock* unreachable = new BasicBlock("break.unreachable." + std::to_string(unreachableCounter++));
         currentFunction->addBasicBlock(unreachable);
         builder.setInsertPoint(unreachable);
-
+        
         return nullptr;
     }
 
@@ -2034,6 +2042,125 @@ public:
         currentFunction->addBasicBlock(unreachable);
         builder.setInsertPoint(unreachable);
 
+        return nullptr;
+    }
+
+    antlrcpp::Any visitSwitchStmt(SysYParser::SwitchStmtContext* ctx) override {
+        // 生成唯一标识符
+        static int switchCounter = 0;
+        int currentSwitch = switchCounter++;
+        
+        // 计算switch条件表达式
+        ValuePtr cond = std::any_cast<ValuePtr>(visit(ctx->exp()));
+        if (!cond) {
+            return nullptr;
+        }
+        
+        // 确保条件是整数类型（SysY要求switch表达式必须是整数）
+        cond = ensureType(cond, Type::getInt32Ty());
+        
+        // 创建默认基本块和结束基本块
+        BasicBlock* defaultBB = new BasicBlock("switch.default." + std::to_string(currentSwitch));
+        BasicBlock* endBB = new BasicBlock("switch.end." + std::to_string(currentSwitch));
+        
+        // 保存当前循环上下文，以便break可以正确跳转
+        condBlockStack.push(nullptr);  // switch没有cond块
+        mergeBlockStack.push(endBB);   // break应该跳转到endBB
+        
+        // 收集所有case信息
+        std::vector<std::pair<ValuePtr, BasicBlock*>> cases;
+        std::unordered_map<int, BasicBlock*> caseMap;  // 用于检查重复case
+        
+        // 先处理所有case和default，创建对应的基本块
+        for (auto caseCtx : ctx->switchCase()) {
+            if (auto caseClause = dynamic_cast<SysYParser::CaseClauseContext*>(caseCtx)) {
+                // 计算case常量值
+                int caseValue = evalConstExp(caseClause->constExp()->exp());
+                
+                // 检查重复的case值
+                if (caseMap.find(caseValue) != caseMap.end()) {
+                    std::cerr << "Error: duplicate case value " << caseValue << std::endl;
+                    continue;
+                }
+                
+                // 创建case基本块
+                BasicBlock* caseBB = new BasicBlock("switch.case." + 
+                                                    std::to_string(currentSwitch) + "." +
+                                                    std::to_string(caseValue));
+                caseMap[caseValue] = caseBB;
+                cases.push_back({ConstantInt::get(caseValue), caseBB});
+            }
+        }
+        
+        // 创建switch指令
+        builder.CreateSwitch(cond, defaultBB, cases);
+        
+        // 处理各个case和default的代码
+        bool hasDefaultBeenProcessed = false;
+        
+        for (auto caseCtx : ctx->switchCase()) {
+            if (auto caseClause = dynamic_cast<SysYParser::CaseClauseContext*>(caseCtx)) {
+                // 获取对应的基本块
+                int caseValue = evalConstExp(caseClause->constExp()->exp());
+                BasicBlock* caseBB = caseMap[caseValue];
+                
+                // 设置插入点
+                if (!currentFunction->hasBasicBlock(caseBB)) {
+                    currentFunction->addBasicBlock(caseBB);
+                }
+                builder.setInsertPoint(caseBB);
+                
+                // 处理case中的语句
+                for (auto item : caseClause->blockItem()) {
+                    visit(item);
+                }
+                
+                // 检查是否自然结束（无break/return）
+                if (!builder.getInsertBlock()->isTerminated()) {
+                    // 没有break，跳转到结束
+                    builder.CreateBr(endBB);
+                }
+            }
+            else if (auto defaultClause = dynamic_cast<SysYParser::DefaultClauseContext*>(caseCtx)) {
+                // 标记default已经处理过
+                hasDefaultBeenProcessed = true;
+                
+                // 设置插入点
+                if (!currentFunction->hasBasicBlock(defaultBB)) {
+                    currentFunction->addBasicBlock(defaultBB);
+                }
+                builder.setInsertPoint(defaultBB);
+                
+                // 处理default中的语句
+                for (auto item : defaultClause->blockItem()) {
+                    visit(item);
+                }
+                
+                // 检查是否自然结束
+                if (!builder.getInsertBlock()->isTerminated()) {
+                    builder.CreateBr(endBB);
+                }
+            }
+        }
+        
+        // 如果default块还没有被添加到函数中，添加它
+        if (!currentFunction->hasBasicBlock(defaultBB)) {
+            currentFunction->addBasicBlock(defaultBB);
+            builder.setInsertPoint(defaultBB);
+            // 默认块直接跳转到结束
+            builder.CreateBr(endBB);
+        }
+        
+        // 设置结束基本块
+        if (!currentFunction->hasBasicBlock(endBB)) {
+            currentFunction->addBasicBlock(endBB);
+        }
+        builder.setInsertPoint(endBB);
+        
+        // 恢复循环上下文
+        condBlockStack.pop();
+        mergeBlockStack.pop();
+        
         return nullptr;
     }
 };

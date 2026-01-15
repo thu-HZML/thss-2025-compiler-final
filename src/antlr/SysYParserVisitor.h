@@ -73,6 +73,8 @@ public:
 
     virtual std::any visitReturnStmt(SysYParser::ReturnStmtContext *context) = 0;
 
+    virtual std::any visitSwitchStmt(SysYParser::SwitchStmtContext *context) = 0;
+
     virtual std::any visitLandExp(SysYParser::LandExpContext *context) = 0;
 
     virtual std::any visitLValExp(SysYParser::LValExpContext *context) = 0;
@@ -106,6 +108,10 @@ public:
     virtual std::any visitConstExp(SysYParser::ConstExpContext *context) = 0;
 
     virtual std::any visitPointerPrefix(SysYParser::PointerPrefixContext *context) = 0;
+
+    virtual std::any visitCaseClause(SysYParser::CaseClauseContext *context) = 0;
+
+    virtual std::any visitDefaultClause(SysYParser::DefaultClauseContext *context) = 0;
 
 
 };
